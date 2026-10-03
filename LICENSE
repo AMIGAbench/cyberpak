@@ -1,0 +1,79 @@
+CyberPak — License
+==================
+
+Copyright (c) 2026 AMIGAbench <amigabench@gmail.com>
+
+CyberPak is freeware for non-commercial use.
+
+
+1. Use and distribution
+-----------------------
+
+CyberPak may be used, copied, modified and distributed free of charge, as a
+program and as source code, as long as all of the following conditions are
+met:
+
+a) Not commercial. Neither the program, nor parts of it, nor any work derived
+   from it may be sold, rented or passed on for payment, and none of it may be
+   bundled with a product that is sold. Only the plain cost of the medium and
+   of shipping may be recovered. Inclusion in freely available collections,
+   for example Aminet, is explicitly allowed.
+
+b) All copyright, origin and license notices are preserved: this file and the
+   notices in the header comments of the source files.
+
+c) Modified versions are marked as modified and carry the same conditions.
+
+
+2. No warranty
+--------------
+
+CyberPak is provided as it is, without any warranty. There is no promise that
+it is fit for any purpose or that it works free of defects. The copyright
+holder is not liable for damage arising from its use, including loss of data
+or damage to hardware.
+
+
+3. Origin — why these conditions
+--------------------------------
+
+CyberPak is a reimplementation of CyberAVI for 68k Amigas and stands in its
+debt. The non-commercial condition under 1a) is not a whim; it follows from
+that origin.
+
+* CyberAVI is Copyright (c) 1996–1997 Thore Böckelmann and is freeware. Parts
+  are ported from its source: the Cinepak decoder from
+  `decoder/txt/DecodeCVID.c` (the building of the codebooks, the block loop,
+  the handling of the strips) as well as the EClock time base and the
+  drift-free audio clock from `CyberAVISync.mod`. The header comments of the
+  files concerned name each place individually.
+
+  CyberAVI itself is not part of this release. Under the terms of its author it
+  may only be distributed complete and unmodified in its original archive.
+
+* The documentation of CyberAVI reproduces the license notice of XAnim, to
+  which decoder knowledge can be traced back. It is therefore preserved here:
+
+      xanim.c
+
+      Copyright (C) 1990,1991,1992,1993,1994,1995,1996,1997 by Mark Podlipec.
+      All rights reserved.
+
+      This software may be freely copied, modified and redistributed without
+      fee for non-commerical purposes provided that this copyright notice is
+      preserved intact on all copies and modified copies.
+
+      There is no warranty or other guarantee of fitness of this software.
+      It is provided solely "as is". The author(s) disclaim(s) all
+      responsibility and liability with respect to this software's usage
+      or its effect upon hardware or computer systems.
+
+  The "non-commercial" condition there is the reason for 1a).
+
+* Chunky-to-planar: `src/asm/c2p1x1_*.s` and `src/asm/c2p_kalms_040.s` come
+  from Mikael Kalms (mikael@kalms.org, github.com/Kalmalyzer/kalms-c2p) and
+  have been released into the public domain by their author. The changes
+  against the original are stated in the header comment of each file.
+
+* Not included and not affected by this license: the Amiga NDK headers, the
+  cross compiler, Kickstart ROMs and the test material (film excerpts).

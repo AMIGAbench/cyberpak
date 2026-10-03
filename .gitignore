@@ -1,0 +1,11 @@
+# Bauergebnis
+build.m*/
+build.x86_64/
+dist/
+
+# Testmaterial (nicht im Repository) und lokale Ablagen
+clips/
+logs/
+
+__pycache__/
+*.pyc
