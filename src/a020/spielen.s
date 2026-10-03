@@ -48,6 +48,8 @@
         xref    sc_vpid,sc_vpmodes,sc_bplcon0,sc_steuer
         xref    zeit_zuletzt,zeit_open,zeit_close,zeit_now,zeit_arm,zeit_consume,zeit_sigmask,zeit_ms,zt_freq
         xref    audio_open,audio_close,audio_write,audio_service,audio_played
+        xref    audio_weg_setzen,au_weg,au_ahiunit
+        xref    opt_ahi,opt_ahiunit
         xref    au_rate,au_period,au_effrate,au_mask,au_bytes,au_sent,au_lost,au_under
         xref    au_err,au_minpend,au_maxring,au_checkio,au_bufsz,au_nbuf,au_rcount,au_ende
         xref    muldiv32,udiv32
@@ -380,6 +382,9 @@ spielen:
         bne     .vorpuffern
         tst.l   cp_arate                ; 0 = no sound (do not ask achans)
         beq     .vorpuffern
+        move.l  opt_ahi,d0              ; the path, before opening
+        move.l  opt_ahiunit,d1
+        bsr     audio_weg_setzen
         move.l  cp_arate,d0
         move.l  cp_achans,d1
         move.l  cp_abits,d2
@@ -388,13 +393,17 @@ spielen:
         bsr     audio_open
         tst.l   d0
         beq     .ton_da
+        lea     t_h_noaudio,a2
         lea     t_r_tonformat,a1
         cmp.l   #1,d0
         beq     .ton_fehlt
         lea     t_r_audio,a1
+        cmp.l   #4,d0
+        bne     .ton_fehlt
+        lea     t_r_ahi,a1              ; AHI was asked for and is not there
+        lea     t_m_auto,a2
 .ton_fehlt:
         lea     t_m_ton,a0
-        lea     t_h_noaudio,a2
         bra     modus_fehlt
 .ton_da:
         st      sp_ton
@@ -412,6 +421,15 @@ spielen:
         bsr     out_str
         move.l  cp_abits,d0
         bsr     out_unum
+        tst.b   au_weg                  ; AHI: no period, the rate is exact
+        beq     .paula_zeile
+        lea     t_ahiunit,a0
+        bsr     out_str
+        move.l  au_ahiunit,d0
+        bsr     out_unum
+        bsr     out_nl
+        bra     .vorpuffern
+.paula_zeile:
         lea     t_periode,a0
         bsr     out_str
         move.l  au_period,d0
@@ -1132,6 +1150,10 @@ statistik:
         tst.b   sp_ton
         beq     .zeit
         lea     s_ton1,a0
+        tst.b   au_weg
+        beq     .tonkopf
+        lea     s_ton1ahi,a0
+.tonkopf:
         bsr     out_str
         move.l  au_mask,d0
         moveq   #2,d1
@@ -1406,128 +1428,131 @@ hunks_zeigen:
         rts
 
         section data,data
-t_e_open:       dc.b    "Datei laesst sich nicht oeffnen oder lesen",0
-t_e_format:     dc.b    "Kein CPKS-Strom (kein Kopfpaket?)",0
-t_e_mem:        dc.b    "Zu wenig Speicher fuer den Lesepuffer",0
-t_e_codec:      dc.b    "Nur Cinepak wird unterstuetzt",0
-t_e_timer:      dc.b    "timer.device nicht verfuegbar",0
+t_e_open:       dc.b    "Cannot open or read the file",0
+t_e_format:     dc.b    "Not a CPKS stream (no header packet?)",0
+t_e_mem:        dc.b    "Not enough memory for the read buffer",0
+t_e_codec:      dc.b    "Only Cinepak is supported",0
+t_e_timer:      dc.b    "timer.device not available",0
 t_bench1:       dc.b    "  BENCH: ",0
-t_bench2:       dc.b    " Bilder, Decoder je Bild ",0
-t_bench3:       dc.b    " us, Decoderfehler: ",0
+t_bench2:       dc.b    " frames, decoder per frame ",0
+t_bench3:       dc.b    " us, decoder errors: ",0
 t_m_gray:       dc.b    "GRAY",0
 t_m_ham6:       dc.b    "HAM6",0
 t_m_dham6:      dc.b    "DHAM6",0
 t_m_dham8:      dc.b    "DHAM8",0
 t_m_hicolor:    dc.b    "HICOLOR",0
-t_m_auto:       dc.b    "(ohne Optionen)",0
-t_m_auto_ham6:  dc.b    "HAM6 (ohne Optionen)",0
-t_m_auto_dham8: dc.b    "DHAM8 (ohne Optionen)",0
-t_m_auto_rtg32: dc.b    "RTG 32 Bit (ohne Optionen)",0
-t_h_rtg:        dc.b    "DHAM8  oder  HAM6  oder  GRAY",0
-t_h_hicolor:    dc.b    "(ohne Optionen)",0
-t_r_rtggeo:     dc.b    "Bildgroesse passt nicht (Breite ein Vielfaches von 4, hoechstens 4096)",0
-t_rtg1:         dc.b    ", Fenster ",0
-t_rtg2:         dc.b    ", Tiefe ",0
-t_rtg3:         dc.b    ", Pixelformat ",0
-t_h_ecs:        dc.b    "HAM6  oder  GRAY",0
-t_h_kleiner:    dc.b    "DHAM6  oder  HAM6",0
-t_r_ecs:        dc.b    "braucht AGA (ECS-Chipsatz erkannt)",0
-t_r_setpatch:   dc.b    "braucht AGA-Tiefen in der Anzeigedatenbank (AGA-Chipsatz - SetPatch gelaufen?)",0
-t_r_rtg:        dc.b    "Grafikkarten-Ausgabe ist im 020-Player noch nicht eingebaut",0
-t_m_ton:        dc.b    "Ton",0
+t_m_auto:       dc.b    "(no options)",0
+t_m_auto_ham6:  dc.b    "HAM6 (no options)",0
+t_m_auto_dham8: dc.b    "DHAM8 (no options)",0
+t_m_auto_rtg32: dc.b    "RTG 32 bit (no options)",0
+t_h_rtg:        dc.b    "DHAM8  or  HAM6  or  GRAY",0
+t_h_hicolor:    dc.b    "(no options)",0
+t_r_rtggeo:     dc.b    "Picture size does not fit (width a multiple of 4, at most 4096)",0
+t_rtg1:         dc.b    ", window ",0
+t_rtg2:         dc.b    ", depth ",0
+t_rtg3:         dc.b    ", pixel format ",0
+t_h_ecs:        dc.b    "HAM6  or  GRAY",0
+t_h_kleiner:    dc.b    "DHAM6  or  HAM6",0
+t_r_ecs:        dc.b    "needs AGA (ECS chipset detected)",0
+t_r_setpatch:   dc.b    "needs AGA depths in the display database (AGA chipset - has SetPatch run?)",0
+t_r_rtg:        dc.b    "graphics card output is not built into the 020 player yet",0
+t_m_ton:        dc.b    "Sound",0
 t_h_novideo:    dc.b    "NOVIDEO",0
 t_h_noaudio:    dc.b    "NOAUDIO",0
-t_r_chip:       dc.b    "kein zusammenhaengender Chip-RAM-Block fuer die Bitplanes",0
-t_r_geometrie:  dc.b    "Bildgroesse passt nicht (320 breit, hoechstens so hoch wie der Schirm)",0
-t_r_tabellen:   dc.b    "Zu wenig Speicher fuer die Farbtabellen (bis 110 KB)",0
-t_r_tonformat:  dc.b    "Tonformat wird nicht unterstuetzt",0
-t_r_audio:      dc.b    "audio.device liess sich nicht oeffnen (belegt?)",0
-t_r_lib:        dc.b    "graphics.library oder intuition.library ab V36 fehlt",0
-t_r_modus:      dc.b    "Anzeigemodus gibt es auf dieser Maschine nicht",0
-t_r_tiefe:      dc.b    "Anzeigemodus traegt nicht so viele Bitplanes",0
-t_r_schirmauf:  dc.b    "Schirm liess sich nicht oeffnen (Chip-RAM?)",0
-t_r_bitmap:     dc.b    "Schirm uebernimmt die eigene BitMap nicht (SA_BitMap)",0
-t_r_fenster:    dc.b    "Fenster auf dem Schirm liess sich nicht oeffnen",0
+t_r_chip:       dc.b    "no contiguous chip RAM block for the bitplanes",0
+t_r_geometrie:  dc.b    "Picture size does not fit (320 wide, at most as high as the screen)",0
+t_r_tabellen:   dc.b    "Not enough memory for the colour tables (up to 110 KB)",0
+t_r_tonformat:  dc.b    "Sound format is not supported",0
+t_r_audio:      dc.b    "audio.device could not be opened (in use?)",0
+t_r_ahi:        dc.b    "ahi.device could not be opened (is AHI installed?)",0
+t_ahiunit:      dc.b    " bit  ->  AHI unit ",0
+t_r_lib:        dc.b    "graphics.library or intuition.library V36 or later is missing",0
+t_r_modus:      dc.b    "the display mode does not exist on this machine",0
+t_r_tiefe:      dc.b    "the display mode does not carry that many bitplanes",0
+t_r_schirmauf:  dc.b    "the screen could not be opened (chip RAM?)",0
+t_r_bitmap:     dc.b    "the screen does not take over our own BitMap (SA_BitMap)",0
+t_r_fenster:    dc.b    "the window on the screen could not be opened",0
 t_zwei:         dc.b    "  ",0
 t_cinepak:      dc.b    "  Cinepak  ",0
-t_fpstb:        dc.b    " fps  CPKS, Timebase ",0
-t_ausgabe:      dc.b    "  Ausgabe: ",0
-t_modusid:      dc.b    ", einfach gepuffert, PLANAR, Modus 0x",0
-t_modusid_c2p:  dc.b    ", einfach gepuffert, C2P, Modus 0x",0
-t_planesadr:    dc.b    ", Planes 0x",0
+t_fpstb:        dc.b    " fps  CPKS, timebase ",0
+t_ausgabe:      dc.b    "  Output: ",0
+t_modusid:      dc.b    ", single buffered, PLANAR, mode 0x",0
+t_modusid_c2p:  dc.b    ", single buffered, C2P, mode 0x",0
+t_planesadr:    dc.b    ", planes 0x",0
 t_gfx:          dc.b    ", graphics V",0
-t_anzeige:      dc.b    "  Anzeige: VP 0x",0
+t_anzeige:      dc.b    "  Display: VP 0x",0
 t_vpmodes:      dc.b    ", Modes 0x",0
 t_ham:          dc.b    " HAM",0
 t_ehb:          dc.b    " EHB",0
-t_ohneham:      dc.b    " ohne HAM",0
+t_ohneham:      dc.b    " without HAM",0
 t_bplcon0:      dc.b    ", BPLCON0 0x",0
-t_unbekannt:    dc.b    "unbekannt",0
-t_steuer:       dc.b    ", Steuerplanes nach dem Oeffnen 0x",0
-t_steuer2:      dc.b    " (neu 0xdd77)",0
-t_ton:          dc.b    "  Ton: ",0
+t_unbekannt:    dc.b    "unknown",0
+t_steuer:       dc.b    ", control planes after opening 0x",0
+t_steuer2:      dc.b    " (now 0xdd77)",0
+t_ton:          dc.b    "  Sound: ",0
 t_hz:           dc.b    " Hz, ",0
-t_kanaele:      dc.b    " Kanaele, ",0
-t_periode:      dc.b    " Bit  ->  Periode ",0
-t_tatsaechlich: dc.b    ", tatsaechlich ",0
+t_kanaele:      dc.b    " channels, ",0
+t_periode:      dc.b    " bit  ->  period ",0
+t_tatsaechlich: dc.b    ", actually ",0
 t_hzzeile:      dc.b    " Hz",10,0
-t_vorgeladen:   dc.b    "  vorgeladen: ",0
-t_frames:       dc.b    " Frames, ",0
-t_tonsamples:   dc.b    " Tonsamples",10,0
-s_ton1:         dc.b    "  Ton: Kanalmaske 0x",0
+t_vorgeladen:   dc.b    "  prebuffered: ",0
+t_frames:       dc.b    " frames, ",0
+t_tonsamples:   dc.b    " audio samples",10,0
+s_ton1:         dc.b    "  Sound: channel mask 0x",0
+s_ton1ahi:      dc.b    "  Sound: AHI unit 0x",0
 s_ton2:         dc.b    ", ",0
-s_ton3:         dc.b    " Samples, ",0
-s_ton4:         dc.b    " Puffer, ",0
-s_ton5:         dc.b    " verworfen, ",0
-s_ton6:         dc.b    "x leergelaufen, io_Error=",0
-s_puf1:         dc.b    "  Tonpuffer: ",0
+s_ton3:         dc.b    " samples, ",0
+s_ton4:         dc.b    " buffers, ",0
+s_ton5:         dc.b    " dropped, ",0
+s_ton6:         dc.b    "x ran dry, io_Error=",0
+s_puf1:         dc.b    "  Audio buffers: ",0
 s_puf2:         dc.b    " x ",0
-s_puf3:         dc.b    " Samples, min. gefuellt ",0
-s_puf4:         dc.b    ", max. Rueckstau ",0
-s_puf5:         dc.b    " Samples, CheckIO ",0
-s_zeit1:        dc.b    "  Zeit: Platte ",0
-s_zeit2:        dc.b    " ms, Ton ",0
-s_zeit3:        dc.b    " ms, Anzeige ",0
-s_zeit3b:       dc.b    " ms, Decoder ",0
-s_zeit4:        dc.b    " ms, gesamt ",0
-s_zeit5:        dc.b    " ms, Leerlauf ",0
+s_puf3:         dc.b    " samples, min. filled ",0
+s_puf4:         dc.b    ", max. backlog ",0
+s_puf5:         dc.b    " samples, CheckIO ",0
+s_zeit1:        dc.b    "  Time: disk ",0
+s_zeit2:        dc.b    " ms, sound ",0
+s_zeit3:        dc.b    " ms, display ",0
+s_zeit3b:       dc.b    " ms, decoder ",0
+s_zeit4:        dc.b    " ms, total ",0
+s_zeit5:        dc.b    " ms, idle ",0
 s_zeit6:        dc.b    " ms",10,0
-s_strom1:       dc.b    "  Strom: ",0
-s_strom2:       dc.b    " Bilder, ",0
-s_strom3:       dc.b    " Keyframes, ",0
-s_strom4:       dc.b    " Tonsamples, ",0
-s_strom5:       dc.b    " Wiederaufsetzer, ",0
-s_strom6:       dc.b    " zu gross, ",0
+s_strom1:       dc.b    "  Stream: ",0
+s_strom2:       dc.b    " frames, ",0
+s_strom3:       dc.b    " keyframes, ",0
+s_strom4:       dc.b    " audio samples, ",0
+s_strom5:       dc.b    " resyncs, ",0
+s_strom6:       dc.b    " too large, ",0
 s_strom7:       dc.b    " Read()",10,0
-s_lesen1:       dc.b    "  Lesen: ",0
-s_lesen2:       dc.b    " Read() zu je bis ",0
-s_lesen3:       dc.b    " KB, gesamt ",0
-s_lesen4:       dc.b    " ms, laengster ",0
-s_lesen5:       dc.b    " ms, ueber einem Bildabstand: ",0
-s_planar1:      dc.b    "  PLANAR: Decoder je Bild ",0
-s_planar2:      dc.b    " ms, Budget je Bild ",0
-s_planar3:      dc.b    " ms, Decoderfehler: ",0
-s_verzug1:      dc.b    "  Verzug (Bild fertig nach seinem pts): mittel ",0
-s_verzug2:      dc.b    " ms, spaeter als ein Bildabstand: ",0
-s_verzug3:      dc.b    " von ",0
-s_spitz1:       dc.b    "  Spitzen: laengstes Bild ",0
-s_spitz2:       dc.b    " ms, laengstes Pumpen ",0
-s_spitz3:       dc.b    " ms, meiste Bilder je Runde ",0
-s_td1:          dc.b    "  Tondienst: laengste Luecke ",0
-s_td2:          dc.b    " ms, laenger als die Paula-Warteschlange (",0
+s_lesen1:       dc.b    "  Read: ",0
+s_lesen2:       dc.b    " Read() of up to ",0
+s_lesen3:       dc.b    " KB, total ",0
+s_lesen4:       dc.b    " ms, longest ",0
+s_lesen5:       dc.b    " ms, above one frame spacing: ",0
+s_planar1:      dc.b    "  PLANAR: decoder per frame ",0
+s_planar2:      dc.b    " ms, budget per frame ",0
+s_planar3:      dc.b    " ms, decoder errors: ",0
+s_verzug1:      dc.b    "  Lateness (frame ready after its pts): mean ",0
+s_verzug2:      dc.b    " ms, later than one frame spacing: ",0
+s_verzug3:      dc.b    " of ",0
+s_spitz1:       dc.b    "  Peaks: longest frame ",0
+s_spitz2:       dc.b    " ms, longest pump ",0
+s_spitz3:       dc.b    " ms, most frames per round ",0
+s_td1:          dc.b    "  Sound service: longest gap ",0
+s_td2:          dc.b    " ms, longer than the Paula queue (",0
 s_td3:          dc.b    " ms): ",0
-s_sprung1:      dc.b    "  Bildsprung: ",0
-s_sprung2:      dc.b    "x zum Keyframe, im Leser verworfen ",0
-s_sprung3:      dc.b    " Bilder",10,0
-s_hunks:        dc.b    "  Speicher: Hunks",0
-s_ang1:         dc.b    "  angezeigt ",0
-s_ang2:         dc.b    ", dekodiert ",0
-s_ang3:         dc.b    ", nicht angezeigt ",0
-s_ang4:         dc.b    ", ohne Dekodieren verworfen ",0
-s_ang5:         dc.b    ", Wiederaufsetzer ",0
-s_ang6:         dc.b    ", gelesen ",0
+s_sprung1:      dc.b    "  Frame jump: ",0
+s_sprung2:      dc.b    "x to the keyframe, dropped in the reader ",0
+s_sprung3:      dc.b    " frames",10,0
+s_hunks:        dc.b    "  Memory: hunks",0
+s_ang1:         dc.b    "  shown ",0
+s_ang2:         dc.b    ", decoded ",0
+s_ang3:         dc.b    ", not shown ",0
+s_ang4:         dc.b    ", dropped without decoding ",0
+s_ang5:         dc.b    ", resyncs ",0
+s_ang6:         dc.b    ", read ",0
 s_ang7:         dc.b    " KB",10,0
-s_ok:           dc.b    "[OK] Wiedergabe beendet",10,0
+s_ok:           dc.b    "[OK] playback finished",10,0
                 cnop    0,4
 ; Reasons for screen_open (SC_E_1..6)
 t_r_schirm:     dc.l    t_r_lib,t_r_modus,t_r_tiefe,t_r_schirmauf,t_r_bitmap,t_r_fenster

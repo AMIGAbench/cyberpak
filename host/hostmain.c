@@ -102,14 +102,14 @@ int main(int argc, char **argv)
     }
     if (!fn) { fprintf(stderr, "usage: %s [--stats] [--ppm DIR|--pgm DIR] [--frames N] file.avi\n", argv[0]); return 2; }
 
-    if (yuv_selftest()) { fprintf(stderr, "yuv_selftest fehlgeschlagen\n"); return 3; }
+    if (yuv_selftest()) { fprintf(stderr, "yuv_selftest failed\n"); return 3; }
 
     data = slurp(fn, &size);
     if (!data) { fprintf(stderr, "cannot read %s\n", fn); return 3; }
 
     if (avi_open(&av, data, size) != 0) { fprintf(stderr, "no usable AVI\n"); return 3; }
 
-    fprintf(stderr, "AVI %ux%u  fourcc=%c%c%c%c  %u bit  %u Frames  %u us/Frame\n",
+    fprintf(stderr, "AVI %ux%u  fourcc=%c%c%c%c  %u bit  %u frames  %u us/frame\n",
             av.width, av.height,
             (char)(av.compression >> 24), (char)(av.compression >> 16),
             (char)(av.compression >> 8),  (char)av.compression,
@@ -153,8 +153,8 @@ int main(int argc, char **argv)
         n++;
     }
 
-    if (want_hash) printf("TOTAL %08lx  (%d Frames)\n", (unsigned long)total_hash, n);
-    fprintf(stderr, "%d Frames dekodiert\n", n);
+    if (want_hash) printf("TOTAL %08lx  (%d frames)\n", (unsigned long)total_hash, n);
+    fprintf(stderr, "%d frames decoded\n", n);
     cvid_close(ctx);
     free(fb); free(data);
     return 0;

@@ -243,23 +243,23 @@ dosname:    dc.b    "dos.library",0
 progname:   dc.b    "CyberPak",0
 template:   dc.b    "DATEI/A,HAM6/S,GRAY/S,STATS/S,QUIET/S,NOAUDIO/S,NOVIDEO/S,ABUF/K/N,ANUM/K/N,READ/K/N",0
 t_fehler:   dc.b    "[FAIL] ",0
-t_hamgray:  dc.b    "HAM6 und GRAY schliessen sich aus",0
-t_abuf:     dc.b    "ABUF muss groesser als 0 sein",0
-t_anum:     dc.b    "ANUM muss groesser als 0 sein",0
-t_read:     dc.b    "READ muss 1, 2, 4, 8, 16, 32 oder 64 (KB) sein",0
+t_hamgray:  dc.b    "HAM6 and GRAY are mutually exclusive",0
+t_abuf:     dc.b    "ABUF has to be greater than 0",0
+t_anum:     dc.b    "ANUM has to be greater than 0",0
+t_read:     dc.b    "READ has to be 1, 2, 4, 8, 16, 32 or 64 (KB)",0
 t_readk:    dc.b    ", READ ",0
 t_kopf:     dc.b    "CyberPak 68000: ",0
-t_modus5:   dc.b    ", 5 Planes 4-4-2",0
-t_modusgr:  dc.b    ", 5 Planes Graustufen",0
+t_modus5:   dc.b    ", 5 planes 4-4-2",0
+t_modusgr:  dc.b    ", 5 planes grey levels",0
 t_modush6:  dc.b    ", HAM6",0
 t_abufk:    dc.b    ", ABUF ",0
 t_anumk:    dc.b    ", ANUM ",0
 t_noaudio:  dc.b    ", NOAUDIO",0
 t_novideo:  dc.b    ", NOVIDEO",0
-t_mf1:      dc.b    "Modus ",34,0
-t_mf2:      dc.b    34," nicht verfuegbar: ",0
-t_mf3:      dc.b    10,"Bitte einen anderen Modus probieren",0
-t_mf4:      dc.b    ", z. B.: ",0
+t_mf1:      dc.b    "Mode ",34,0
+t_mf2:      dc.b    34," not available: ",0
+t_mf3:      dc.b    10,"Please try a different mode",0
+t_mf4:      dc.b    ", e.g.: ",0
 
         section bss,bss
 

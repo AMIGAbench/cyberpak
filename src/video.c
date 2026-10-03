@@ -72,7 +72,7 @@ int      rtg_pix16(void)            { return g_pix16; }
  * asked for - and then says what went wrong and what could be used instead.
  * Previously HICOLOR silently stayed with the 32-bit path, and above all
  * that the chipset stepped in inside vout.c. */
-static const char *g_rtg_err  = "nicht geoeffnet";
+static const char *g_rtg_err  = "not opened";
 static const char *g_rtg_hint = "";
 static char        g_rtg_buf[160];
 const char *rtg_status(void) { return g_rtg_err; }
@@ -178,15 +178,15 @@ int rtg_open(uint32_t w, uint32_t h, const char *title)
     CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
     if (!CyberGfxBase)
         return rtg_fail(VIDEO_ERR_LIB,
-                        "cybergraphics.library fehlt (keine Grafikkarte?)",
-                        "(ohne Optionen)");
+                        "cybergraphics.library is missing (no graphics card?)",
+                        "(no options)");
 
     g_screen = LockPubScreen(NULL);
     if (!g_screen) {
         CloseLibrary(CyberGfxBase); CyberGfxBase = NULL;
         return rtg_fail(VIDEO_ERR_WINDOW,
-                        "Workbench-Schirm liess sich nicht sperren",
-                        "DHAM8  oder  HAM6  oder  GRAY");
+                        "the Workbench screen could not be locked",
+                        "DHAM8  or  HAM6  or  GRAY");
     }
     g_ownscreen = 0;
 
@@ -198,30 +198,30 @@ int rtg_open(uint32_t w, uint32_t h, const char *title)
         UnlockPubScreen(NULL, g_screen); g_screen = NULL;
         CloseLibrary(CyberGfxBase); CyberGfxBase = NULL;
         return rtg_fail(VIDEO_ERR_LIB,
-                        "cybergraphics.library fehlt oder die Workbench liegt nicht auf der Grafikkarte",
-                        "DHAM8  oder  HAM6  oder  GRAY");
+                        "cybergraphics.library is missing or the Workbench is not on the graphics card",
+                        "DHAM8  or  HAM6  or  GRAY");
     }
 
     if (!open_window_on(g_screen, 0)) {
         UnlockPubScreen(NULL, g_screen); g_screen = NULL;
         CloseLibrary(CyberGfxBase); CyberGfxBase = NULL;
         return rtg_fail(VIDEO_ERR_WINDOW,
-                        "Fenster auf dem Workbench-Schirm liess sich nicht oeffnen",
-                        "DHAM8  oder  HAM6  oder  GRAY");
+                        "the window on the Workbench screen could not be opened",
+                        "DHAM8  or  HAM6  or  GRAY");
     }
 
     /* Below 15 bit WritePixelArray would have to reduce colours per pixel -
      * that would be orders of magnitude slower than the decoding and is
      * not the purpose of this path. The AGA path is there for that. */
     if (g_depth < 15) {
-        char *q = rput(g_rtg_buf, "Workbench-Schirm hat ");
+        char *q = rput(g_rtg_buf, "the Workbench screen has ");
         q = rnum(q, (unsigned long)g_depth);
-        q = rput(q, " Bit - die Grafikkarte braucht 15 Bit oder mehr"
+        q = rput(q, " bit - the graphics card needs 15 bit or more"
                     " (Bildschirmmodus umstellen)");
         *q = 0;
         rtg_close();
         return rtg_fail(VIDEO_ERR_DEPTH, g_rtg_buf,
-                        "DHAM8  oder  HAM6  oder  GRAY");
+                        "DHAM8  or  HAM6  or  GRAY");
     }
 
     /* The 16-bit path only if it really fits: the library is there AND the
@@ -236,8 +236,8 @@ int rtg_open(uint32_t w, uint32_t h, const char *title)
         if (!P96Base) {
             rtg_close();
             return rtg_fail(VIDEO_ERR_DEPTH,
-                            "HICOLOR braucht die Picasso96API.library - sie fehlt",
-                            "(ohne Optionen)");
+                            "HICOLOR needs Picasso96API.library - it is missing",
+                            "(no options)");
         }
         switch (g_pixfmt) {
         case PIXFMT_RGB16:   g_pix16 = CVX_PIX16_R5G6B5;   g_rgbfb = RGBFB_R5G6B5;   g_use16 = 1; break;
@@ -247,15 +247,15 @@ int rtg_open(uint32_t w, uint32_t h, const char *title)
         default: break;      /* BGR variants and truecolor: see below */
         }
         if (!g_use16) {
-            char *q = rput(g_rtg_buf, "HICOLOR: Bildschirmformat ");
+            char *q = rput(g_rtg_buf, "HICOLOR: screen format ");
             q = rnum(q, (unsigned long)g_pixfmt);
-            q = rput(q, " ist keines der vier 15/16-Bit-Formate, die der Decoder packen kann");
+            q = rput(q, " is none of the four 15/16 bit formats the decoder can pack for");
             *q = 0;
             rtg_close();
-            return rtg_fail(VIDEO_ERR_DEPTH, g_rtg_buf, "(ohne Optionen)");
+            return rtg_fail(VIDEO_ERR_DEPTH, g_rtg_buf, "(no options)");
         }
     }
-    g_rtg_err = "RTG offen"; g_rtg_hint = "";
+    g_rtg_err = "RTG open"; g_rtg_hint = "";
     return 0;
 }
 
@@ -268,13 +268,13 @@ int rtg_probe(void)
 
     CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
     if (!CyberGfxBase)
-        return rtg_fail(VIDEO_ERR_LIB, "cybergraphics.library fehlt (keine Grafikkarte?)",
-                        "(ohne Optionen)");
+        return rtg_fail(VIDEO_ERR_LIB, "cybergraphics.library is missing (no graphics card?)",
+                        "(no options)");
     sc = LockPubScreen(NULL);
     if (!sc) {
         CloseLibrary(CyberGfxBase); CyberGfxBase = NULL;
-        return rtg_fail(VIDEO_ERR_WINDOW, "Workbench-Schirm liess sich nicht sperren",
-                        "DHAM8  oder  HAM6  oder  GRAY");
+        return rtg_fail(VIDEO_ERR_WINDOW, "the Workbench screen could not be locked",
+                        "DHAM8  or  HAM6  or  GRAY");
     }
     is      = GetCyberMapAttr(sc->RastPort.BitMap, CYBRMATTR_ISCYBERGFX);
     g_depth = GetCyberMapAttr(sc->RastPort.BitMap, CYBRMATTR_DEPTH);
@@ -282,14 +282,14 @@ int rtg_probe(void)
     CloseLibrary(CyberGfxBase); CyberGfxBase = NULL;
     if (!is)
         return rtg_fail(VIDEO_ERR_LIB,
-                        "cybergraphics.library fehlt oder die Workbench liegt nicht auf der Grafikkarte",
-                        "DHAM8  oder  HAM6  oder  GRAY");
+                        "cybergraphics.library is missing or the Workbench is not on the graphics card",
+                        "DHAM8  or  HAM6  or  GRAY");
     if (g_depth < 15) {
-        char *q = rput(g_rtg_buf, "Workbench-Schirm hat ");
+        char *q = rput(g_rtg_buf, "the Workbench screen has ");
         q = rnum(q, (unsigned long)g_depth);
-        q = rput(q, " Bit - die Grafikkarte braucht 15 Bit oder mehr (Bildschirmmodus umstellen)");
+        q = rput(q, " bit - the graphics card needs 15 bit or more (change the screen mode)");
         *q = 0;
-        return rtg_fail(VIDEO_ERR_DEPTH, g_rtg_buf, "DHAM8  oder  HAM6  oder  GRAY");
+        return rtg_fail(VIDEO_ERR_DEPTH, g_rtg_buf, "DHAM8  or  HAM6  or  GRAY");
     }
     return 0;
 }

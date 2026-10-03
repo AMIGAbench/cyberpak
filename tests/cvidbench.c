@@ -22,8 +22,8 @@
  * is nevertheless ONLY the decoding time: reading happens outside the clock.
  *
  * cvidbench used to load CPKS into ONE memory block in full as well. On a
- * real A600 (68000, 28 MHz) that ended with "AllocVec fehlgeschlagen - zu
- * wenig freier Speicher" while the player played the same file; in the
+ * real A600 (68000, 28 MHz) that ended with "AllocVec failed - not enough
+ * free memory" while the player played the same file; in the
  * emulator with 4 MB of fast RAM and small test clips it had never shown up.
  * AVI is still loaded whole - avi_open() needs the index -, but AVI is
  * only the path of the golden hashes in the emulator now.
@@ -114,24 +114,24 @@ static uint8_t *load(const char *fn, uint32_t *size, const char **why)
 
     *why = "?";
     fh = Open((CONST_STRPTR)fn, MODE_OLDFILE);
-    if (!fh) { *why = "Open() fehlgeschlagen - Datei da? Pfad richtig?"; return NULL; }
+    if (!fh) { *why = "Open() failed - is the file there? Is the path right?"; return NULL; }
 
     Seek(fh, 0, OFFSET_END);
     n = Seek(fh, 0, OFFSET_BEGINNING);
-    if (n <= 0) { Close(fh); *why = "Datei ist leer"; return NULL; }
+    if (n <= 0) { Close(fh); *why = "the file is empty"; return NULL; }
 
     buf = (uint8_t *)AllocVec((ULONG)n, MEMF_ANY);
     if (!buf) {
         Close(fh);
         g_fail_size    = n;
         g_fail_largest = (long)AvailMem(MEMF_ANY | MEMF_LARGEST);
-        *why = "AllocVec fehlgeschlagen - zu wenig freier Speicher";
+        *why = "AllocVec failed - not enough free memory";
         return NULL;
     }
 
     got = Read(fh, buf, n);
     Close(fh);
-    if (got != n) { FreeVec(buf); *why = "Read() unvollstaendig - Datei beschaedigt?"; return NULL; }
+    if (got != n) { FreeVec(buf); *why = "Read() incomplete - is the file damaged?"; return NULL; }
 
     *size = (uint32_t)n;
     return buf;
@@ -158,7 +158,7 @@ int main(int argc, char **argv)
     int n = 0, gray = 0, perframe = 0, hi = 0, limit = 0;
     char *p;
 
-    if (argc < 2) { PLAT_PUTS("[FAIL] usage: cvidbench <datei.avi|datei.cpks> [gray|hi]\n"); return 1; }
+    if (argc < 2) { PLAT_PUTS("[FAIL] usage: cvidbench <file.avi|file.cpks> [gray|hi]\n"); return 1; }
     gray = (argc > 2 && argv[2][0] == 'g');
     /* "hi" selects the 16-bit output mode - the path with the
      * assembler block loop. For the comparison against the C branch
@@ -197,16 +197,16 @@ int main(int argc, char **argv)
         cs = cpks_open(argv[1], 1, &err);
         if (!cs) {
             p = pstr(obuf, "[FAIL] "); p = pstr(p, argv[1]); p = pstr(p, ": ");
-            p = pstr(p, err == CPKS_ERR_OPEN   ? "Open() fehlgeschlagen - Datei da? Pfad richtig?"
-                      : err == CPKS_ERR_MEMORY ? "zu wenig Speicher fuer Lesepuffer und Warteschlange"
-                      :                          "kein brauchbares CPKS-Kopfpaket");
+            p = pstr(p, err == CPKS_ERR_OPEN   ? "Open() failed - is the file there? Is the path right?"
+                      : err == CPKS_ERR_MEMORY ? "not enough memory for the read buffer and the queue"
+                      :                          "no usable CPKS header packet");
             *p++ = '\n'; emit(p);
             timing_close();
             return 1;
         }
         ci = cpks_get_info(cs);
         w = ci->width & ~3u; h = ci->height & ~3u;
-        PLAT_PUTS("  CPKS wird bildweise gelesen\n");
+        PLAT_PUTS("  CPKS is read frame by frame\n");
     } else {
         const char *why;
         int arc;
@@ -215,7 +215,7 @@ int main(int argc, char **argv)
             p = pstr(obuf, "[FAIL] "); p = pstr(p, argv[1]);
             p = pstr(p, ": "); p = pstr(p, why);
             if (g_fail_size) {
-                p = pstr(p, " (Datei "); p = pnum(p, g_fail_size);
+                p = pstr(p, " (file "); p = pnum(p, g_fail_size);
                 p = pstr(p, " Bytes, groesster freier Block "); p = pnum(p, g_fail_largest);
                 p = pstr(p, " Bytes - auf echter Hardware CPKS verwenden)");
             }
@@ -223,14 +223,14 @@ int main(int argc, char **argv)
             timing_close();
             return 1;
         }
-        p = pstr(obuf, "  Datei gelesen, "); p = pnum(p, (long)size);
+        p = pstr(obuf, "  file read, "); p = pnum(p, (long)size);
         p = pstr(p, " Bytes\n"); emit(p);
         arc = avi_open(&av, data, size);
         if (arc != 0) {
-            p = pstr(obuf, "[FAIL] weder CPKS noch brauchbares AVI (rc=");
+            p = pstr(obuf, "[FAIL] neither CPKS nor a usable AVI (rc=");
             p = pnum(p, arc);
-            p = pstr(p, arc == -1 ? ", kein RIFF/AVI-Kopf"
-                                  : ", movi/Videospur nicht gefunden");
+            p = pstr(p, arc == -1 ? ", no RIFF/AVI header"
+                                  : ", movi/video track not found");
             p = pstr(p, ")\n"); emit(p);
             timing_close();
             return 1;
@@ -243,7 +243,7 @@ int main(int argc, char **argv)
 
     ctx = cvid_open(w, h, gray ? CVID_OUT_GRAY8 : (hi ? CVID_OUT_RGB16 : CVID_OUT_RGB32));
     fb = (uint8_t *)calloc((size_t)stride * h, 1);
-    if (!ctx || !fb) { PLAT_PUTS("[FAIL] kein Speicher fuer Decoder und Bildpuffer\n"); timing_close(); return 1; }
+    if (!ctx || !fb) { PLAT_PUTS("[FAIL] no memory for the decoder and the picture buffer\n"); timing_close(); return 1; }
 
     p = pstr(obuf, "[BOOT] cvidbench "); p = pnum(p, (long)w); p = pstr(p, "x");
     p = pnum(p, (long)h);

@@ -51,7 +51,7 @@ int main(void)
     int n = 0;
 
     PLAT_PUTS("[BOOT] modelist\n");
-    PLAT_PUTS("ID        Breite Hoehe Tiefe  Flags\n");
+    PLAT_PUTS("ID        width  height depth  flags\n");
 
     while ((id = NextDisplayInfo(id)) != (ULONG)INVALID_ID) {
         struct DimensionInfo dim;

@@ -460,7 +460,7 @@ def main():
     if a.hashes:
         open(a.hashes, 'w').write('\n'.join(lines) + '\n')
     if ref is not None:
-        print('Bilder %d, abweichend %d (%s, %s)' % (n, bad, a.mode, a.clip))
+        print('frames %d, deviating %d (%s, %s)' % (n, bad, a.mode, a.clip))
     else:
         print('Bilder %d (%s)' % (n, a.mode))
     return 1 if bad else 0

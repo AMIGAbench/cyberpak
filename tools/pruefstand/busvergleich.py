@@ -69,7 +69,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--bilder', type=int, default=60)
     a = ap.parse_args()
-    print('Chip-Buszugriffe je Bild (%d Bilder, BENCH), Byte/Wort %.2f us, Langwort %.2f us'
+    print('chip bus accesses per frame (%d frames, BENCH), byte/word %.2f us, longword %.2f us'
           % (a.bilder, US_KURZ, US_LANG))
     print('%-9s %-6s %-6s %9s %9s %9s %9s %8s' % ('Clip', 'Modus', 'Weg', 'lesen', 'lesen L', 'schreiben',
                                                   'schreib L', 'Bus ms'))

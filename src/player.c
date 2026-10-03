@@ -125,9 +125,9 @@ static void cpks_sink(const uint8_t *pcm, uint32_t n)
 /* Two lines with fixed beginnings - the server passes them on. */
 static void modus_fehlt(const char *modus, const char *grund, const char *hint)
 {
-    say("Modus \""); say(modus); say("\" nicht verfuegbar: "); say(grund);
-    say("\nBitte einen anderen Modus probieren");
-    if (hint && *hint) { say(", z. B.: "); say(hint); }
+    say("Mode \""); say(modus); say("\" not available: "); say(grund);
+    say("\nPlease try a different mode");
+    if (hint && *hint) { say(", e.g.: "); say(hint); }
     say("\n");
 }
 
@@ -138,15 +138,15 @@ static void modus_fehlt(const char *modus, const char *grund, const char *hint)
 static const char *kern_grund(uint32_t e)
 {
     switch (e) {
-    case KERN_SC_LIB:      return "graphics.library oder intuition.library ab V36 fehlt";
-    case KERN_SC_MODUS:    return "Anzeigemodus gibt es auf dieser Maschine nicht";
-    case KERN_SC_TIEFE:    return "Anzeigemodus traegt nicht so viele Bitplanes";
-    case KERN_SC_SCHIRM:   return "Schirm liess sich nicht oeffnen (Chip-RAM?)";
-    case KERN_SC_BITMAP:   return "Schirm uebernimmt die eigene BitMap nicht (SA_BitMap)";
-    case KERN_SC_FENSTER:  return "Fenster auf dem Schirm liess sich nicht oeffnen";
-    case KERN_SC_ECS:      return "braucht AGA (ECS-Chipsatz erkannt)";
-    case KERN_SC_SETPATCH: return "braucht AGA-Tiefen in der Anzeigedatenbank (AGA-Chipsatz - SetPatch gelaufen?)";
-    default:               return "unbekannter Fehler";
+    case KERN_SC_LIB:      return "graphics.library or intuition.library V36 or later is missing";
+    case KERN_SC_MODUS:    return "the display mode does not exist on this machine";
+    case KERN_SC_TIEFE:    return "the display mode does not carry that many bitplanes";
+    case KERN_SC_SCHIRM:   return "the screen could not be opened (chip RAM?)";
+    case KERN_SC_BITMAP:   return "the screen does not take over our own BitMap (SA_BitMap)";
+    case KERN_SC_FENSTER:  return "the window on the screen could not be opened";
+    case KERN_SC_ECS:      return "needs AGA (ECS chipset detected)";
+    case KERN_SC_SETPATCH: return "needs AGA depths in the display database (AGA chipset - has SetPatch run?)";
+    default:               return "unknown error";
     }
 }
 #endif
@@ -173,9 +173,9 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
     s = cpks_open(fn, 16, &err);
     if (!s) {
         switch (err) {
-        case CPKS_ERR_OPEN:   say("Datei nicht gefunden oder nicht lesbar\n"); break;
-        case CPKS_ERR_FORMAT: say("Kein brauchbarer CPKS-Strom (kein Kopfpaket?)\n"); break;
-        default:              say("Zu wenig Speicher\n"); break;
+        case CPKS_ERR_OPEN:   say("File not found or not readable\n"); break;
+        case CPKS_ERR_FORMAT: say("Not a usable CPKS stream (no header packet?)\n"); break;
+        default:              say("Not enough memory\n"); break;
         }
         return 20;
     }
@@ -183,7 +183,7 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
     in = cpks_get_info(s);
 
     if (in->codec != FOURCC('c','v','i','d') && in->codec != FOURCC('C','V','I','D')) {
-        say("Nur Cinepak wird bisher unterstuetzt\n"); cpks_close(s); return 20;
+        say("Only Cinepak is supported so far\n"); cpks_close(s); return 20;
     }
 
     w = in->width & ~3u;
@@ -199,7 +199,7 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
         p = pstr(obuf, "  "); p = pnum(p, (long)w); *p++ = 'x'; p = pnum(p, (long)h);
         p = pstr(p, "  Cinepak  ");
         p = pnum(p, (long)(in->fps_den ? in->fps_num / in->fps_den : 0));
-        p = pstr(p, " fps  CPKS, Timebase "); p = pnum(p, (long)tb);
+        p = pstr(p, " fps  CPKS, timebase "); p = pnum(p, (long)tb);
         p = pstr(p, "\n"); emit(p);
     }
 
@@ -216,7 +216,7 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
             weg = WEG_KERN;
         } else {
             int r = rtg_probe();
-            name = "RTG 32 Bit (ohne Optionen)";
+            name = "RTG 32 bit (no options)";
             if (r == 0) weg = WEG_RTG;
             else if (r == VIDEO_ERR_DEPTH) {
                 modus_fehlt(name, rtg_status(), rtg_hint());
@@ -236,13 +236,13 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
         stride = STRIDE_ALIGN(w * (hi ? 2u : 4u));
         ctx = cvid_open(w, h, hi ? CVID_OUT_RGB16 : CVID_OUT_RGB32);
         fb  = (uint8_t *)calloc((size_t)stride * h, 1);
-        if (!ctx || !fb) { say("Zu wenig Speicher fuer den Bildpuffer\n"); goto cfail; }
+        if (!ctx || !fb) { say("Not enough memory for the picture buffer\n"); goto cfail; }
         if (hi) cvid_set_pix16(ctx, rtg_pix16());
         if (!quiet) {
-            p = pstr(obuf, "  Ausgabe: "); p = pstr(p, name);
-            p = pstr(p, ", Grafikkarte "); p = pnum(p, (long)(hi ? 16 : 32));
-            p = pstr(p, " Bit, Tiefe "); p = pnum(p, (long)rtg_depth());
-            p = pstr(p, ", Pixelformat "); p = pnum(p, (long)rtg_pixfmt());
+            p = pstr(obuf, "  Output: "); p = pstr(p, name);
+            p = pstr(p, ", graphics card "); p = pnum(p, (long)(hi ? 16 : 32));
+            p = pstr(p, " bit, depth "); p = pnum(p, (long)rtg_depth());
+            p = pstr(p, ", pixel format "); p = pnum(p, (long)rtg_pixfmt());
             *p++ = '\n'; emit(p);
         }
     }
@@ -251,7 +251,7 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
         uint32_t aga, planes, r;
         uint8_t *ziel;
         if (kern_anzeige_erkennen() != 0) {
-            modus_fehlt("(ohne Optionen)", kern_grund(KERN_SC_LIB), "NOVIDEO");
+            modus_fehlt("(no options)", kern_grund(KERN_SC_LIB), "NOVIDEO");
             fail_rc = 10; goto cfail;
         }
         aga = kern_aga();
@@ -259,28 +259,28 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
         else if (gray) modus = aga ? KERN_GRAY8 : KERN_GRAY5;
         else modus = aga ? KERN_DHAM8 : KERN_HAM6;
         switch (modus) {
-        case KERN_HAM6:  name = erzwungen ? "HAM6"  : "HAM6 (ohne Optionen)"; break;
+        case KERN_HAM6:  name = erzwungen ? "HAM6"  : "HAM6 (no options)"; break;
         case KERN_DHAM6: name = "DHAM6"; break;
-        case KERN_DHAM8: name = erzwungen ? "DHAM8" : "DHAM8 (ohne Optionen)"; break;
+        case KERN_DHAM8: name = erzwungen ? "DHAM8" : "DHAM8 (no options)"; break;
         default:         name = "GRAY"; break;
         }
         if ((modus == KERN_DHAM6 || modus == KERN_DHAM8) && !aga) {
             modus_fehlt(name, kern_grund(kern_aachip() ? KERN_SC_SETPATCH : KERN_SC_ECS),
-                        "HAM6  oder  GRAY");
+                        "HAM6  or  GRAY");
             fail_rc = 10; goto cfail;
         }
         planes = kern_planes_open(modus, in->height);
         if (!planes) {
-            modus_fehlt(name, "kein zusammenhaengender Chip-RAM-Block fuer die Bitplanes",
-                        (modus == KERN_DHAM6 || modus == KERN_DHAM8) ? "DHAM6  oder  HAM6" : "NOVIDEO");
+            modus_fehlt(name, "no contiguous chip RAM block for the bitplanes",
+                        (modus == KERN_DHAM6 || modus == KERN_DHAM8) ? "DHAM6  or  HAM6" : "NOVIDEO");
             fail_rc = 10; goto cfail;
         }
         /* Modes this build sends through C2P (screen.s, sc_c2pmodi) have a chunky picture */
         ziel = kern_chunky() ? (uint8_t *)kern_chunky() : (uint8_t *)planes;
         r = kern_cvid_open(modus, ziel, in->width, in->height, kern_nominal());
         if (r) {
-            modus_fehlt(name, r == 1 ? "Bildgroesse passt nicht (320 breit, hoechstens so hoch wie der Schirm)"
-                                     : "Zu wenig Speicher fuer die Farbtabellen (bis 110 KB)", "NOVIDEO");
+            modus_fehlt(name, r == 1 ? "Picture size does not fit (320 wide, at most as high as the screen)"
+                                     : "Not enough memory for the colour tables (up to 110 KB)", "NOVIDEO");
             fail_rc = 10; goto cfail;
         }
         r = kern_screen_open(modus);
@@ -289,10 +289,10 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
             fail_rc = 10; goto cfail;
         }
         if (!quiet) {
-            p = pstr(obuf, "  Ausgabe: "); p = pstr(p, name);
-            p = pstr(p, ", Chipsatz, einfach gepuffert, ");
-            p = pstr(p, kern_chunky() ? "C2P" : "direkt in die Planes");
-            p = pstr(p, ", Modus 0x"); p = phex8(p, kern_modeid());
+            p = pstr(obuf, "  Output: "); p = pstr(p, name);
+            p = pstr(p, ", chipset, single buffered, ");
+            p = pstr(p, kern_chunky() ? "C2P" : "straight into the planes");
+            p = pstr(p, ", mode 0x"); p = phex8(p, kern_modeid());
             *p++ = '\n'; emit(p);
         }
     }
@@ -303,24 +303,40 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
     /* `arate == 0` means "no sound". Do NOT ask `achans`: the encoder
      * fills in channel count and bit depth even when there is no sound track. */
     if (!noaudio && in->arate) {
-        if (audio_open(in->arate, in->achans, in->abits) == 0) {
+        int aerr = audio_open(in->arate, in->achans, in->abits);
+        if (aerr == 0) {
             g_have_audio = 1;
             if (!quiet) {
-                p = pstr(obuf, "  Ton: "); p = pnum(p, (long)audio_rate());
+                p = pstr(obuf, "  Sound: "); p = pnum(p, (long)audio_rate());
                 p = pstr(p, " Hz, "); p = pnum(p, (long)in->achans);
-                p = pstr(p, " Kanaele, "); p = pnum(p, (long)in->abits);
-                p = pstr(p, " Bit  ->  Periode "); p = pnum(p, (long)audio_period());
-                p = pstr(p, ", tatsaechlich "); p = pnum(p, (long)audio_eff_rate());
-                p = pstr(p, " Hz\n"); emit(p);
+                p = pstr(p, " channels, "); p = pnum(p, (long)in->abits);
+                if (audio_weg() == AUDIO_WEG_AHI) {
+                    /* No period: ahi.device takes the rate as it is, so there
+                     * is no rate deviation to report either. */
+                    p = pstr(p, " bit  ->  AHI unit ");
+                    p = pnum(p, (long)audio_ahi_unit());
+                } else {
+                    p = pstr(p, " bit  ->  period ");
+                    p = pnum(p, (long)audio_period());
+                    p = pstr(p, ", actually "); p = pnum(p, (long)audio_eff_rate());
+                    p = pstr(p, " Hz");
+                }
+                *p++ = '\n'; emit(p);
             }
         } else {
-            modus_fehlt("Ton", "audio.device liess sich nicht oeffnen (belegt?)", "NOAUDIO");
+            modus_fehlt("Sound",
+                        aerr == AUDIO_ERR_AHI
+                          ? "ahi.device could not be opened (is AHI installed?)"
+                        : aerr == AUDIO_ERR_FORMAT
+                          ? "Sound format is not supported"
+                          : "audio.device could not be opened (in use?)",
+                        aerr == AUDIO_ERR_AHI ? "(no options)" : "NOAUDIO");
             fail_rc = 10;
             goto cfail;
         }
     }
 
-    if (!sync_open(tick)) { say("timer.device nicht verfuegbar\n"); goto cfail; }
+    if (!sync_open(tick)) { say("timer.device not available\n"); goto cfail; }
 
     /* 5.2 prebuffering. */
     {
@@ -335,9 +351,9 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
             if (cpks_eof(s) || !guard--) break;
         }
         if (!quiet) {
-            p = pstr(obuf, "  vorgeladen: "); p = pnum(p, (long)cpks_queued(s));
+            p = pstr(obuf, "  prebuffered: "); p = pnum(p, (long)cpks_queued(s));
             p = pstr(p, " Frames, "); p = pnum(p, (long)cpks_audio_samples(s));
-            p = pstr(p, " Tonsamples\n"); emit(p);
+            p = pstr(p, " audio samples\n"); emit(p);
         }
     }
 
@@ -378,13 +394,13 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
                         } else if (!quiet) {
                             switch (rtg_fs_error()) {
                             case VIDEO_FS_FORMAT:
-                                say("  Vollbild: Modus hat ein anderes Pixelformat, bleibe im Fenster\n");
+                                say("  Full screen: the mode has a different pixel format, staying in the window\n");
                                 break;
                             case VIDEO_FS_NOMODE:
-                                say("  Vollbild: kein passender RTG-Modus gefunden\n");
+                                say("  Full screen: no suitable RTG mode found\n");
                                 break;
                             default:
-                                say("  Vollbild: Screen oder Fenster liess sich nicht oeffnen\n");
+                                say("  Full screen: the screen or the window could not be opened\n");
                                 break;
                             }
                         }
@@ -439,55 +455,57 @@ static int play_cpks(const char *fn, int novideo, int noaudio, int stats, int qu
         sync_arm(0);
     }
 
-    if (novideo && !quiet) say("[OK] Wiedergabeschleife durchgelaufen\n");
+    if (novideo && !quiet) say("[OK] playback loop completed\n");
 
     if (stats && !quiet) {
         uint32_t ms = sync_elapsed_ms();
         uint32_t f  = timing_freq();
         if (g_have_audio) {
-            p = pstr(obuf, "  Ton: Kanalmaske 0x"); p = phex4(p, audio_dbg_mask());
+            p = pstr(obuf, audio_weg() == AUDIO_WEG_AHI ? "  Sound: AHI unit 0x"
+                                                         : "  Sound: channel mask 0x");
+            p = phex4(p, audio_dbg_mask());
             p = pstr(p, ", "); p = pnum(p, (long)audio_dbg_samples());
-            p = pstr(p, " Samples, "); p = pnum(p, (long)audio_dbg_sent());
-            p = pstr(p, " Puffer, "); p = pnum(p, (long)audio_dbg_lost());
-            p = pstr(p, " verworfen, "); p = pnum(p, (long)audio_dbg_under());
-            p = pstr(p, "x leergelaufen, io_Error="); p = pnum(p, (long)audio_dbg_error());
+            p = pstr(p, " samples, "); p = pnum(p, (long)audio_dbg_sent());
+            p = pstr(p, " buffers, "); p = pnum(p, (long)audio_dbg_lost());
+            p = pstr(p, " dropped, "); p = pnum(p, (long)audio_dbg_under());
+            p = pstr(p, "x ran dry, io_Error="); p = pnum(p, (long)audio_dbg_error());
             *p++ = '\n'; emit(p);
-            p = pstr(obuf, "  Tonpuffer: "); p = pnum(p, (long)audio_dbg_nbuf());
+            p = pstr(obuf, "  Audio buffers: "); p = pnum(p, (long)audio_dbg_nbuf());
             p = pstr(p, " x "); p = pnum(p, (long)audio_dbg_bufsz());
-            p = pstr(p, " Samples, min. gefuellt "); p = pnum(p, (long)audio_dbg_minpend());
-            p = pstr(p, ", max. Rueckstau "); p = pnum(p, (long)audio_dbg_maxring());
-            p = pstr(p, " Samples, CheckIO "); p = pnum(p, (long)audio_dbg_checkio());
+            p = pstr(p, " samples, min. filled "); p = pnum(p, (long)audio_dbg_minpend());
+            p = pstr(p, ", max. backlog "); p = pnum(p, (long)audio_dbg_maxring());
+            p = pstr(p, " samples, CheckIO "); p = pnum(p, (long)audio_dbg_checkio());
             *p++ = '\n'; emit(p);
         }
         if (f) {
-            p = pstr(obuf, "  Zeit: Platte ");
+            p = pstr(obuf, "  Time: disk ");
             p = pnum(p, (long)((cpks_read_ticks(s) * 1000u) / f));
-            p = pstr(p, " ms, Ton ");
+            p = pstr(p, " ms, sound ");
             p = pnum(p, (long)((cpks_sink_ticks(s) * 1000u) / f));
-            p = pstr(p, " ms, Anzeige ");
+            p = pstr(p, " ms, display ");
             p = pnum(p, (long)((anz_ticks * 1000u) / f));
-            p = pstr(p, " ms, Decoder ");
+            p = pstr(p, " ms, decoder ");
             p = pnum(p, (long)((dec_ticks * 1000u) / f));
-            p = pstr(p, " ms, gesamt "); p = pnum(p, (long)ms);
+            p = pstr(p, " ms, total "); p = pnum(p, (long)ms);
             p = pstr(p, " ms\n"); emit(p);
             if (decoded) {
-                p = pstr(obuf, "  Decoder je Bild ");
+                p = pstr(obuf, "  Decoder per frame ");
                 p = pnum(p, (long)((dec_ticks * 1000u) / f / decoded));
-                p = pstr(p, " ms, Budget je Bild "); p = pnum(p, (long)(upf / 1000u));
+                p = pstr(p, " ms, budget per frame "); p = pnum(p, (long)(upf / 1000u));
                 p = pstr(p, " ms\n"); emit(p);
             }
         }
-        p = pstr(obuf, "  angezeigt "); p = pnum(p, (long)shown);
-        p = pstr(p, ", dekodiert "); p = pnum(p, (long)decoded);
-        p = pstr(p, ", nicht angezeigt "); p = pnum(p, (long)(decoded - shown));
-        p = pstr(p, ", ohne Dekodieren verworfen "); p = pnum(p, (long)dropped);
-        p = pstr(p, ", Wiederaufsetzer "); p = pnum(p, (long)cpks_dbg_resyncs(s));
-        p = pstr(p, ", gelesen "); p = pnum(p, (long)(cpks_bytes_read(s) / 1024u));
+        p = pstr(obuf, "  shown "); p = pnum(p, (long)shown);
+        p = pstr(p, ", decoded "); p = pnum(p, (long)decoded);
+        p = pstr(p, ", not shown "); p = pnum(p, (long)(decoded - shown));
+        p = pstr(p, ", dropped without decoding "); p = pnum(p, (long)dropped);
+        p = pstr(p, ", resyncs "); p = pnum(p, (long)cpks_dbg_resyncs(s));
+        p = pstr(p, ", read "); p = pnum(p, (long)(cpks_bytes_read(s) / 1024u));
         p = pstr(p, " KB\n"); emit(p);
     }
 
     /* Closing mark for tools/run.sh (only with STATS). */
-    if (stats) say("[OK] Wiedergabe beendet\n");
+    if (stats) say("[OK] playback finished\n");
 
     timing_close();
     sync_close();
@@ -520,7 +538,8 @@ int main(int argc, char **argv)
 {
     const char *fn = NULL;
     int i, stats = 0, quiet = 0, novideo = 0, noaudio = 0, hicolor = 0, gray = 0, modi = 0;
-    uint32_t abuf = 0, anum = 0, erzwungen = 0;
+    uint32_t abuf = 0, anum = 0, erzwungen = 0, ahiunit = 0;
+    int ahi = 0;
 
     for (i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -534,46 +553,53 @@ int main(int argc, char **argv)
         else if (kwmatch(a, "HAM6"))     { erzwungen = KERN_HAM6;  modi++; }
         else if (kwmatch(a, "DHAM6"))    { erzwungen = KERN_DHAM6; modi++; }
         else if (kwmatch(a, "DHAM8"))    { erzwungen = KERN_DHAM8; modi++; }
+        else if (kwmatch(a, "AHI"))      ahi     = 1;
+        else if (kwvalue(a, "AHIUNIT"))  ahiunit = kwvalue(a, "AHIUNIT");
         else if (kwvalue(a, "ABUF"))     abuf    = kwvalue(a, "ABUF");
         else if (kwvalue(a, "ANUM"))     anum    = kwvalue(a, "ANUM");
         else if (kwmatch(a, "AGA") || kwprefix(a, "PLANES=") || kwmatch(a, "PLANAR") ||
                  kwmatch(a, "LORES") || kwmatch(a, "HAM") || kwmatch(a, "HAM8") ||
                  kwmatch(a, "FIXPAL") || kwmatch(a, "NODBUF") || kwmatch(a, "BLIT") ||
                  kwmatch(a, "NOBLIT") || kwmatch(a, "CACHE")) {
-            say("Ungueltiger Aufruf: "); say(a);
-            say(" gibt es nicht mehr - Modi sind HAM6, DHAM6, DHAM8, GRAY und HICOLOR,"
-                " ohne Angabe waehlt der Player selbst\n");
+            say("Invalid call: "); say(a);
+            say(" does not exist any more - the modes are HAM6, DHAM6, DHAM8, GRAY and"
+                " HICOLOR, without one the player chooses itself\n");
             return 5;
         }
         else if (!fn) fn = a;
-        else { say("Unbekannte Option: "); say(a); say("\n"); return 5; }
+        else { say("Unknown option: "); say(a); say("\n"); return 5; }
     }
     if (!fn) {
-        say("CyberPak <datei.cpks> [Optionen]\n"
-            "  Anzeige - hoechstens ein Modus:\n"
-            "            (keine Angabe)  Grafikkarte (32 Bit), sonst AGA mit DHAM8,\n"
-            "                            sonst ECS mit HAM6\n"
-            "            [HICOLOR]       Grafikkarte, 15/16 Bit (Picasso96)\n"
-            "            [HAM6]          HAM6, einfach breit - ECS und AGA\n"
-            "            [DHAM6]         HAM6, doppelt breit - nur AGA\n"
-            "            [DHAM8]         HAM8, doppelt breit - nur AGA\n"
-            "            [GRAY]          Graustufen: ECS 5 Planes, AGA 8 Planes\n"
-            "  Geht ein verlangter Modus nicht, nennt der Player Grund und Vorschlag\n"
-            "  und endet mit Rueckgabewert 10.\n"
-            "  Sonstiges: [NOVIDEO] [NOAUDIO] [STATS] [QUIET] [NOSER]\n"
-            "             [ABUF=n] [ANUM=n]  Tonpuffer: Groesse rate/n, Anzahl n\n"
-            "  Rueckgabewerte: 5 ungueltiger Aufruf, 10 Modus hier nicht verfuegbar,\n"
-            "  20 sonstiger Fehler. Tasten: Leertaste Pause, Return Vollbild\n"
-            "  (Grafikkarte), q oder ESC Ende\n");
+        say("CyberPak <file.cpks> [options]\n"
+            "  Display - at most one mode:\n"
+            "            (nothing given) graphics card (32 bit), otherwise AGA with DHAM8,\n"
+            "                            otherwise ECS with HAM6\n"
+            "            [HICOLOR]       graphics card, 15/16 bit (Picasso96)\n"
+            "            [HAM6]          HAM6, single width - ECS and AGA\n"
+            "            [DHAM6]         HAM6, double width - AGA only\n"
+            "            [DHAM8]         HAM8, double width - AGA only\n"
+            "            [GRAY]          grey levels: ECS 5 planes, AGA 8 planes\n"
+            "  If a requested mode is not possible, the player names the reason and a\n"
+            "  suggestion and ends with return code 10.\n"
+            "  Sound: nothing given    audio.device (Paula), 8 bit\n"
+            "         [AHI]           ahi.device: 16 bit and the exact rate\n"
+            "         [AHIUNIT=n]     ahi.device unit, 0 = the preferred one\n"
+            "  Other: [NOVIDEO] [NOAUDIO] [STATS] [QUIET] [NOSER]\n"
+            "         [ABUF=n] [ANUM=n]  audio buffers: size rate/n, count n\n"
+            "  Return codes: 5 invalid call, 10 mode not available here,\n"
+            "  20 other error. Keys: space pause, return full screen\n"
+            "  (graphics card), q or ESC quit\n");
         return 5;
     }
     if (modi > 1) {
-        say("Ungueltiger Aufruf: nur ein Modus - HAM6, DHAM6, DHAM8, GRAY oder HICOLOR\n");
+        say("Invalid call: only one mode - HAM6, DHAM6, DHAM8, GRAY or HICOLOR\n");
         return 5;
     }
     if (abuf || anum) audio_config(abuf, anum);
+    /* The path is decided before opening; AHI is never chosen by itself. */
+    if (ahi || ahiunit) audio_config_weg(ahi ? AUDIO_WEG_AHI : AUDIO_WEG_PAULA, ahiunit);
 
-    if (yuv_selftest()) { say("Farbtabellen fehlerhaft\n"); return 20; }
+    if (yuv_selftest()) { say("colour tables are faulty\n"); return 20; }
 
     /* Deliberately WITHOUT a check for 'CPKS' at position 0 (NETSTREAM: enters
      * in the middle of a stream; the reader looks for the next sync word). */

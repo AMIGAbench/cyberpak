@@ -22,6 +22,7 @@ INCLUDES = [
     'exec/types.i', 'exec/nodes.i', 'exec/lists.i', 'exec/libraries.i', 'exec/execbase.i',
     'exec/tasks.i', 'exec/ports.i', 'exec/io.i', 'exec/memory.i', 'exec/errors.i',
     'dos/dos.i', 'dos/dosextens.i', 'devices/timer.i', 'devices/audio.i',
+    'devices/ahi.i',
     'graphics/gfx.i', 'graphics/view.i', 'graphics/modeid.i', 'graphics/gfxbase.i',
     'graphics/rastport.i', 'graphics/displayinfo.i', 'graphics/copper.i', 'graphics/layers.i',
     'intuition/intuition.i', 'intuition/screens.i', 'utility/tagitem.i',
@@ -51,6 +52,9 @@ ioa_AllocKey ioa_Data ioa_Length ioa_Period ioa_Volume ioa_Cycles ioa_WriteMsg i
 ADCMD_FREE ADCMD_SETPREC ADCMD_FINISH ADCMD_PERVOL ADCMD_LOCK ADCMD_WAITCYCLE ADCMD_ALLOCATE
 ADIOF_PERVOL ADIOF_SYNCCYCLE ADIOF_NOWAIT ADIOF_WRITEMESSAGE
 ADIOERR_NOALLOCATION ADIOERR_ALLOCFAILED ADIOERR_CHANNELSTOLEN
+ahir_Version ahir_Type ahir_Frequency ahir_Volume ahir_Position ahir_Link AHIRequest_SIZEOF
+AHIST_M8S AHIST_S8S AHIST_M16S AHIST_S16S AHI_DEFAULT_UNIT AHI_NO_UNIT
+AHIE_OK AHIE_NOMEM AHIE_BADSOUNDTYPE AHIE_BADSAMPLETYPE AHIE_ABORTED AHIE_UNKNOWN
 bm_BytesPerRow bm_Rows bm_Flags bm_Depth bm_Pad bm_Planes bm_SIZEOF
 vp_SIZEOF
 sc_Width sc_Height sc_ViewPort sc_RastPort sc_BitMap

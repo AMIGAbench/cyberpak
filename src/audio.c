@@ -7,6 +7,7 @@
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <devices/audio.h>
+#include <devices/ahi.h>
 #include <graphics/gfxbase.h>
 #include <proto/exec.h>
 #include <proto/graphics.h>
@@ -27,6 +28,21 @@ extern struct GfxBase *GfxBase;
  * three times on real hardware; the reserve costs the synchronisation
  * nothing, because audio_played_samples() subtracts what is still due. */
 #define NBUF 16          /* upper limit; a_nbuf of them are used */
+
+/* Which path, and the ahi.device unit. Set by audio_config_weg() before
+ * audio_open(); after that nothing switches any more - a path change in
+ * mid-stream would mean a gap, and the clock hangs on the buffer chain. */
+static int      a_weg = AUDIO_WEG_PAULA;
+static uint32_t cfg_unit;
+
+void audio_config_weg(int weg, uint32_t unit)
+{
+    a_weg    = weg == AUDIO_WEG_AHI ? AUDIO_WEG_AHI : AUDIO_WEG_PAULA;
+    cfg_unit = unit;
+}
+
+int      audio_weg(void)      { return a_weg; }
+uint32_t audio_ahi_unit(void) { return cfg_unit; }
 
 /* Diagnostics - answers "why is there no sound" without guesswork. */
 static uint32_t dbg_mask, dbg_bytes, dbg_sent, dbg_blocked, dbg_lost, dbg_under;
@@ -75,6 +91,27 @@ static struct IOAudio *req[NBUF][2];
 static int8_t         *buf[NBUF][2];
 static int             opened;
 static int             stromende;     /* audio_ende(): nothing more coming */
+
+/* --- the AHI path ------------------------------------------------------
+ *
+ * One request and one buffer per slot, both in ANY memory - ahi.device does
+ * not care where the samples lie, so the chip bus stays free.
+ *
+ * The order is announced through ahir_Link: it points BACKWARDS at a request
+ * already sent, and this one is delayed until that one is finished
+ * (ahi.device/CMD_WRITE). So the chain is built the way the buffers are
+ * filled, and the completions tell the clock what has been played - exactly
+ * as on the Paula path. If the predecessor is already done, the link stays
+ * NULL and the buffer starts at once.
+ *
+ * The fields of a request are TRASHED by CMD_WRITE (except io_Device,
+ * io_Unit, io_Command), so send_ahi() fills all of them again every time. */
+static struct AHIRequest *ahi_open_req;      /* the one OpenDevice() got */
+static struct AHIRequest *ahi_req[NBUF];
+static int8_t            *ahi_buf[NBUF];
+static int                ahi_last = -1;     /* last request SENT, -1 = none */
+static uint32_t           a_fs;              /* bytes per sample frame */
+static uint32_t           a_type;            /* AHIST_* */
 
 static uint32_t a_rate, a_chans, a_bits, a_bufsz;
 /* Playback position: samples handed to Paula and the length of each buffer.
@@ -134,6 +171,12 @@ static int buf_done(int b)
     int c;
     if (!queued[b]) return 1;
     if (bdone[b])   return 1;
+    if (a_weg == AUDIO_WEG_AHI) {
+        dbg_checkio++;
+        if (!CheckIO((struct IORequest *)ahi_req[b])) return 0;
+        bdone[b] = 1;
+        return 1;
+    }
     for (c = 0; c < 2; c++)
         if (req[b][c]) {
             dbg_checkio++;
@@ -148,6 +191,14 @@ static void wait_buf(int b)
     int c;
     if (!queued[b]) return;
     if (!buf_done(b)) dbg_blocked++;
+    if (a_weg == AUDIO_WEG_AHI) {
+        WaitIO((struct IORequest *)ahi_req[b]);
+        if (ahi_req[b]->ahir_Std.io_Error)
+            dbg_err = ahi_req[b]->ahir_Std.io_Error;
+        if (ahi_last == b) ahi_last = -1;   /* nothing may link to it now */
+        queued[b] = 0;
+        return;
+    }
     for (c = 0; c < 2; c++)
         if (req[b][c]) {
             WaitIO((struct IORequest *)req[b][c]);
@@ -160,10 +211,45 @@ static void wait_buf(int b)
     queued[b] = 0;
 }
 
+/* One buffer to ahi.device. `len` counts sample FRAMES, io_Length bytes. */
+static void send_ahi(int b, uint32_t len)
+{
+    struct AHIRequest *r = ahi_req[b];
+    struct AHIRequest *vor = NULL;
+
+    /* Link only to a request that is really still outstanding. Refresh the
+     * flag first: linking to one that has already finished would hang a
+     * buffer behind a request whose message is back at our port. */
+    if (ahi_last >= 0 && queued[ahi_last] && !buf_done(ahi_last))
+        vor = ahi_req[ahi_last];
+
+    r->ahir_Std.io_Command = CMD_WRITE;
+    r->ahir_Std.io_Flags   = 0;
+    r->ahir_Std.io_Data    = (APTR)ahi_buf[b];
+    r->ahir_Std.io_Length  = len * a_fs;
+    r->ahir_Std.io_Offset  = 0;
+    r->ahir_Type      = a_type;
+    r->ahir_Frequency = a_rate;
+    r->ahir_Volume    = 0x10000;     /* 1.0 - full volume */
+    r->ahir_Position  = 0x8000;      /* centre; ignored for stereo types */
+    r->ahir_Link      = vor;
+    SendIO((struct IORequest *)r);
+    ahi_last = b;
+}
+
 static void send_buf(int b, uint32_t len)
 {
     int c;
     if (!len) return;
+    if (a_weg == AUDIO_WEG_AHI) {
+        send_ahi(b, len);
+        dbg_sent++;
+        bdone[b] = 0;
+        buflen[b] = len;
+        sent_samples += len;
+        queued[b] = 1;
+        return;
+    }
     for (c = 0; c < 2; c++) {
         if (!req[b][c]) continue;
         req[b][c]->ioa_Request.io_Command = CMD_WRITE;
@@ -249,6 +335,77 @@ uint32_t audio_played_samples(void)
     return played + d;
 }
 
+/* --- opening the AHI path ----------------------------------------------
+ *
+ * No colour clock, no period: ahi.device takes the sample rate as it is and
+ * resamples internally, so the rate deviation that Paula's integer period
+ * forces disappears completely (a_effrate == a_rate).
+ *
+ * 16 bit stays 16 bit here. The buffers and the ring may lie in any memory;
+ * only the ring is bigger than on the Paula path, because one frame is up to
+ * four bytes instead of one per channel. */
+static int ahi_open(uint32_t rate, uint32_t channels, uint32_t bits)
+{
+    int b;
+
+    a_fs    = (bits / 8u) * channels;
+    a_type  = bits == 16 ? (channels == 2 ? AHIST_S16S : AHIST_M16S)
+                         : (channels == 2 ? AHIST_S8S  : AHIST_M8S);
+    a_rate    = rate;
+    a_chans   = channels;
+    a_bits    = bits;
+    a_clock   = 0;
+    period    = 0;
+    a_effrate = rate;
+
+    a_nbuf  = cfg_nbuf;
+    a_bufsz = rate / cfg_div;
+    a_bufsz &= ~3u;
+    if (a_bufsz < 512) a_bufsz = 512;
+
+    aport = CreateMsgPort();
+    if (!aport) return AUDIO_ERR_AHI;
+
+    /* ahir_Version MUST be set before OpenDevice() - CMD_WRITE is V4. */
+    ahi_open_req = (struct AHIRequest *)CreateIORequest(aport, sizeof(struct AHIRequest));
+    if (!ahi_open_req) { audio_close(); return AUDIO_ERR_AHI; }
+    ahi_open_req->ahir_Version = 4;
+    if (OpenDevice((CONST_STRPTR)"ahi.device", cfg_unit,
+                   (struct IORequest *)ahi_open_req, 0) != 0) {
+        audio_close(); return AUDIO_ERR_AHI;
+    }
+    opened = 1;
+    stromende = 0;
+    dbg_mask = cfg_unit;
+
+    for (b = 0; b < (int)a_nbuf; b++) {
+        ahi_req[b] = (struct AHIRequest *)AllocVec(sizeof(struct AHIRequest),
+                                                  MEMF_ANY | MEMF_CLEAR);
+        if (!ahi_req[b]) { audio_close(); return AUDIO_ERR_MEMORY; }
+        *ahi_req[b] = *ahi_open_req;
+        ahi_req[b]->ahir_Std.io_Message.mn_ReplyPort = aport;
+
+        ahi_buf[b] = (int8_t *)AllocVec(a_bufsz * a_fs, MEMF_ANY | MEMF_CLEAR);
+        if (!ahi_buf[b]) { audio_close(); return AUDIO_ERR_MEMORY; }
+    }
+
+    /* ONE ring, interleaved and already in AHI's format - see audio_write().
+     * rhead/rtail/rcount count frames here, as they count samples on the
+     * Paula path, so the clock and the service loop stay the same. */
+    ringsz = rate * RINGSEC;
+    ring[0] = (uint8_t *)AllocVec(ringsz * a_fs, MEMF_ANY | MEMF_CLEAR);
+    if (!ring[0]) { audio_close(); return AUDIO_ERR_MEMORY; }
+    rhead = rtail = rcount = 0;
+
+    fill = 0; cur = 0;
+    ahi_last = -1;
+    sent_samples = 0;
+    pos_last = 0; pos_t0 = timing_now();
+    dbg_minpend = 0xFFFFFFFFu; dbg_maxring = 0;
+    for (b = 0; b < NBUF; b++) buflen[b] = 0;
+    return 0;
+}
+
 int audio_open(uint32_t rate, uint32_t channels, uint32_t bits)
 {
     uint32_t clock;
@@ -257,6 +414,7 @@ int audio_open(uint32_t rate, uint32_t channels, uint32_t bits)
 
     if (!rate || channels < 1 || channels > 2) return AUDIO_ERR_FORMAT;
     if (bits != 8 && bits != 16) return AUDIO_ERR_FORMAT;
+    if (a_weg == AUDIO_WEG_AHI) return ahi_open(rate, channels, bits);
 
     /* Derive the colour clock from the ECLOCK FREQUENCY, not through GfxBase.
      *
@@ -375,6 +533,30 @@ int audio_open(uint32_t rate, uint32_t channels, uint32_t bits)
 void audio_close(void)
 {
     int b, c;
+
+    if (a_weg == AUDIO_WEG_AHI) {
+        /* Abort first, then collect: without AbortIO() closing would wait
+         * until everything still in the chain has been played - up to half a
+         * second after the user has pressed q. ahi.device requires that no
+         * request is outstanding any more when CloseDevice() comes. */
+        for (b = 0; b < NBUF; b++)
+            if (queued[b] && ahi_req[b]) AbortIO((struct IORequest *)ahi_req[b]);
+        for (b = 0; b < NBUF; b++) wait_buf(b);
+        for (b = 0; b < NBUF; b++) {
+            if (ahi_buf[b]) { FreeVec(ahi_buf[b]); ahi_buf[b] = NULL; }
+            if (ahi_req[b]) { FreeVec(ahi_req[b]); ahi_req[b] = NULL; }
+        }
+        if (ring[0]) { FreeVec(ring[0]); ring[0] = NULL; }
+        if (opened) { CloseDevice((struct IORequest *)ahi_open_req); opened = 0; }
+        if (ahi_open_req) {
+            DeleteIORequest((struct IORequest *)ahi_open_req);
+            ahi_open_req = NULL;
+        }
+        if (aport) { DeleteMsgPort(aport); aport = NULL; }
+        ahi_last = -1;
+        return;
+    }
+
     for (b = 0; b < NBUF; b++) wait_buf(b);
     for (b = 0; b < NBUF; b++)
         for (c = 0; c < 2; c++) {
@@ -441,7 +623,10 @@ void audio_service(void)
              * for an empty Paula a gap would open before it. Even length,
              * because Paula counts in words. */
             if ((pend && !stromende) || rcount < 2u) return;
-            n = rcount & ~1u;
+            /* Paula counts in words, so an even length; AHI counts in sample
+             * frames, and io_Length is a multiple of the frame size by
+             * construction. */
+            n = a_weg == AUDIO_WEG_AHI ? rcount : (rcount & ~1u);
         }
         /* look for a free buffer without blocking */
         for (b = 0; b < (int)a_nbuf; b++)
@@ -449,6 +634,16 @@ void audio_service(void)
         if (b >= (int)a_nbuf) return;       /* all busy, later on           */
         if (queued[b]) { wait_buf(b); }     /* done, only needs collecting   */
 
+        if (a_weg == AUDIO_WEG_AHI) {
+            /* One piece per ring end, frames times frame size. The data is
+             * already in AHI's format - audio_write() converted it. */
+            uint32_t first = ringsz - rtail, rest;
+            if (first > n) first = n;
+            rest = n - first;
+            CopyMem(ring[0] + (uint32_t)rtail * a_fs, ahi_buf[b], first * a_fs);
+            if (rest) CopyMem(ring[0], (uint8_t *)ahi_buf[b] + first * a_fs,
+                              rest * a_fs);
+        } else
         for (c = 0; c < 2; c++) {
             uint32_t first, rest;
             if (!buf[b][c] || !ring[c]) continue;
@@ -469,6 +664,47 @@ void audio_service(void)
     }
 }
 
+/* --- the ring on the AHI path -------------------------------------------
+ *
+ * Interleaved, in the format the request announces, so that audio_service()
+ * is nothing but a CopyMem. The conversion costs the same as the Paula path's
+ * deinterleaving - once per sample either way:
+ *
+ *   8 bit: the stream is unsigned (as in the AVI), AHIST_*8S wants signed, so
+ *          flip the top bit.
+ *  16 bit: the stream is signed little endian, AHIST_*16S wants the m68k word
+ *          order, so swap the two bytes of every sample. This is where the
+ *          16 bit stays 16 bit - the Paula path throws the low byte away. */
+static void ahi_write(const uint8_t *pcm, uint32_t frames)
+{
+    const uint8_t *sp = pcm;
+
+    while (frames) {
+        uint32_t room = ringsz - rcount;
+        uint32_t run  = ringsz - rhead;
+        uint8_t *q;
+
+        if (!room) { dbg_lost++; return; }
+        if (run > room)   run = room;
+        if (run > frames) run = frames;
+
+        q = ring[0] + (uint32_t)rhead * a_fs;
+        rhead += run;
+        if (rhead == ringsz) rhead = 0;
+        rcount    += run;
+        dbg_bytes += run;
+        frames    -= run;
+
+        if (a_bits == 8) {
+            uint32_t k = run * a_chans;        /* one byte per channel */
+            while (k--) *q++ = (uint8_t)(*sp++ ^ 0x80);
+        } else {
+            uint32_t k = run * a_chans;        /* one word per channel */
+            while (k--) { q[0] = sp[1]; q[1] = sp[0]; q += 2; sp += 2; }
+        }
+    }
+}
+
 void audio_write(const uint8_t *pcm, uint32_t bytes)
 {
     uint32_t step;
@@ -476,6 +712,7 @@ void audio_write(const uint8_t *pcm, uint32_t bytes)
     if (!opened || !bytes) return;
     step = (a_bits / 8) * a_chans;
     if (!step) return;
+    if (a_weg == AUDIO_WEG_AHI) { ahi_write(pcm, bytes / step); return; }
 
     /* Block-wise instead of sample by sample.
      *
@@ -564,5 +801,9 @@ uint32_t audio_dbg_minpend(void) { return 0; }
 uint32_t audio_dbg_maxring(void) { return 0; }
 uint32_t audio_dbg_bufsz(void)   { return 0; }
 uint32_t audio_dbg_nbuf(void)    { return 0; }
+void     audio_config_weg(int w, uint32_t u) { (void)w; (void)u; }
+int      audio_weg(void)         { return AUDIO_WEG_PAULA; }
+uint32_t audio_ahi_unit(void)    { return 0; }
+int32_t  audio_dbg_error(void)   { return 0; }
 
 #endif

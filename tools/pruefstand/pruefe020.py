@@ -92,7 +92,7 @@ def aufruf_ohne_datei():
 @test
 def aufruf_zwei_modi():
     am, rc, out, err = lauf('cpkstest.cpks HAM6 DHAM8')
-    pruefe(err is None and rc == 5 and 'Nur ein Modus' in out, '%r %r %r' % (rc, err, out))
+    pruefe(err is None and rc == 5 and 'Only one mode' in out, '%r %r %r' % (rc, err, out))
     sauber(am)
 
 
@@ -110,7 +110,7 @@ def aufruf_grey_und_noser():
 def binaer_020_gleich_030():
     a = open(os.path.join(P.ROOT, 'build.m68020/CyberPak.020'), 'rb').read()
     b = open(os.path.join(P.ROOT, 'build.m68030/CyberPak.030'), 'rb').read()
-    pruefe(a == b, '.020 und .030 unterscheiden sich')
+    pruefe(a == b, '.020 and .030 differ')
 
 
 # --- decoding against the reference decoder ------------------------------------
@@ -122,9 +122,9 @@ def golden_test(clip, modus, vorbau=True, **kw):
         am, rc, out, err, ist = dekodiere(clip, modus, vorbau=vorbau, zaehler=z, **kw)
         pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-300:]))
         P.vergleiche_hashes(ist, soll, 'Golden')
-        pruefe('Decoderfehler: 0' in out, out[-300:])
+        pruefe('decoder errors: 0' in out, out[-300:])
         if vorbau:
-            pruefe(z['vorbauen'] >= len(soll) // 2, 'nur %d-mal vorgebaut' % z['vorbauen'])
+            pruefe(z['vorbauen'] >= len(soll) // 2, 'only pre-built %d times' % z['vorbauen'])
         else:
             pruefe(z['vorbauen'] == 0, '%d-mal vorgebaut' % z['vorbauen'])
         sauber(am)
@@ -151,7 +151,7 @@ for _seed, _m, _vb in ((21, 'gray8', True), (22, 'dham6', True), (23, 'dham8', T
         soll = P.referenz_hashes(data, MODI[modus][4])
         am, rc, out, err, ist = dekodiere(data, modus, vorbau=vorbau)
         pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-300:]))
-        P.vergleiche_hashes(ist, soll, 'Referenzdecoder')
+        P.vergleiche_hashes(ist, soll, 'reference decoder')
         sauber(am)
     _zt.__name__ = 'dekodieren_zufall_%d_%s%s' % (_seed, _m, '' if _vb else '_ohne_vorbau')
     test(_zt)
@@ -162,7 +162,7 @@ def dekodieren_falsche_breite():
     import struct
     data = P.cpks_datei([b'']).replace(struct.pack('>HH', 320, 180), struct.pack('>HH', 640, 180), 1)
     am, rc, out, err, ist = dekodiere(data, 'dham8')
-    pruefe(err is None and rc == 10 and 'Bildgroesse' in out and 'nicht verfuegbar' in out, '%r %r %r' % (rc, err, out))
+    pruefe(err is None and rc == 10 and 'Picture size' in out and 'not available' in out, '%r %r %r' % (rc, err, out))
     sauber(am)
 
 
@@ -178,7 +178,7 @@ def automatik_aga_dham8():
     am, rc, out, err = lauf('cpkstest.cpks STATS NOAUDIO', us_per_byte=0)
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-300:]))
     pruefe(schirm(am) == (0x29800, 8, 640, 256), 'Schirm %r' % (schirm(am),))
-    pruefe('DHAM8 (ohne Optionen)' in out, out[:600])
+    pruefe('DHAM8 (no options)' in out, out[:600])
     sauber(am)
 
 
@@ -187,7 +187,7 @@ def automatik_ecs_ham6():
     am, rc, out, err = lauf('cpkstest.cpks STATS NOAUDIO', chipset='ecs', us_per_byte=0)
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-300:]))
     pruefe(schirm(am) == (0x21800, 6, 320, 256), 'Schirm %r' % (schirm(am),))
-    pruefe('HAM6 (ohne Optionen)' in out, out[:600])
+    pruefe('HAM6 (no options)' in out, out[:600])
     sauber(am)
 
 
@@ -212,15 +212,15 @@ def gray_ecs_und_aga():
 def dham6_auf_ecs():
     am, rc, out, err = lauf('cpkstest.cpks DHAM6', chipset='ecs')
     pruefe(err is None and rc == 10, '%r %r %r' % (rc, err, out))
-    pruefe('Modus "DHAM6" nicht verfuegbar: braucht AGA (ECS-Chipsatz erkannt)' in out
-           and 'z. B.: HAM6  oder  GRAY' in out, out)
+    pruefe('Mode "DHAM6" not available: needs AGA (ECS chipset detected)' in out
+           and 'e.g.: HAM6  or  GRAY' in out, out)
     sauber(am)
 
 
 @test
 def dham8_ohne_setpatch():
     am, rc, out, err = lauf('cpkstest.cpks DHAM8', setpatch=False)
-    pruefe(err is None and rc == 10 and 'SetPatch' in out and 'Modus "DHAM8" nicht verfuegbar' in out,
+    pruefe(err is None and rc == 10 and 'SetPatch' in out and 'Mode "DHAM8" not available' in out,
            '%r %r %r' % (rc, err, out))
     sauber(am)
 
@@ -241,11 +241,11 @@ def rtg_test(clip):
     def t():
         am, rc, out, err = lauf('%s STATS NOAUDIO' % clip, rtg=karte(), us_per_byte=0)
         pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
-        pruefe('RTG 32 Bit (ohne Optionen), Fenster 320x180, Tiefe 24, Pixelformat 11' in out, out[:700])
+        pruefe('RTG 32 bit (no options), window 320x180, depth 24, pixel format 11' in out, out[:700])
         ist = [b[1] for b in am.rtg_bilder]
         pruefe(all(b[0] == 'argb' and b[2:] == (4, 11, 320, 180) for b in am.rtg_bilder), am.rtg_bilder[:2])
         P.vergleiche_hashes(ist, rtg_golden(clip, 'rgb32'), 'Golden RTG')
-        pruefe(am.closed_window['tags'].get(ndk.WA_PubScreen) is not None, 'kein Fenster auf der Workbench')
+        pruefe(am.closed_window['tags'].get(ndk.WA_PubScreen) is not None, 'no window on the Workbench')
         sauber(am)
     t.__name__ = 'rtg32_%s' % clip.split('.')[0]
     return test(t)
@@ -261,7 +261,7 @@ for _fmt, _n in (('PIXFMT_RGB16', 0), ('PIXFMT_RGB15', 1), ('PIXFMT_RGB16PC', 2)
         pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
         ist = [b[1] for b in am.rtg_bilder]
         pruefe(all(b[0].startswith('p96:') for b in am.rtg_bilder), am.rtg_bilder[:2])
-        P.vergleiche_hashes(ist, rtg_golden('cpkstest.cpks', 'rgb16_%d' % n), 'Golden RTG 16 Bit')
+        P.vergleiche_hashes(ist, rtg_golden('cpkstest.cpks', 'rgb16_%d' % n), 'Golden RTG 16 bit')
         sauber(am)
     _rt.__name__ = 'rtg16_' + _fmt.split('_')[1].lower()
     test(_rt)
@@ -270,8 +270,8 @@ for _fmt, _n in (('PIXFMT_RGB16', 0), ('PIXFMT_RGB15', 1), ('PIXFMT_RGB16PC', 2)
 @test
 def rtg_workbench_8bit():
     am, rc, out, err = lauf('cpkstest.cpks NOAUDIO', rtg=karte(8, ndk.PIXFMT_LUT8))
-    pruefe(err is None and rc == 10 and '15 Bit' in out and 'RTG 32 Bit (ohne Optionen)' in out
-           and 'z. B.: DHAM8  oder  HAM6  oder  GRAY' in out, '%r %r %r' % (rc, err, out))
+    pruefe(err is None and rc == 10 and '15 bit' in out and 'RTG 32 bit (no options)' in out
+           and 'e.g.: DHAM8  or  HAM6  or  GRAY' in out, '%r %r %r' % (rc, err, out))
     sauber(am)
 
 
@@ -279,7 +279,7 @@ def rtg_workbench_8bit():
 def rtg_workbench_nicht_auf_karte():
     am, rc, out, err = lauf('cpkstest.cpks STATS NOAUDIO', rtg=karte(cgx=False), us_per_byte=0)
     pruefe(err is None and rc == 0 and schirm(am) == (0x29800, 8, 640, 256), '%r %r %r' % (rc, schirm(am), out[-300:]))
-    pruefe(not am.rtg_bilder, 'trotzdem ins Fenster gezeichnet')
+    pruefe(not am.rtg_bilder, 'drawn into the window all the same')
     sauber(am)
 
 
@@ -294,8 +294,8 @@ def rtg_erzwungener_chipsatz():
 @test
 def hicolor_ohne_karte():
     am, rc, out, err = lauf('cpkstest.cpks HICOLOR')
-    pruefe(err is None and rc == 10 and 'Modus "HICOLOR" nicht verfuegbar: cybergraphics.library fehlt' in out
-           and 'z. B.: (ohne Optionen)' in out, '%r %r %r' % (rc, err, out))
+    pruefe(err is None and rc == 10 and 'Mode "HICOLOR" not available: cybergraphics.library is missing' in out
+           and 'e.g.: (no options)' in out, '%r %r %r' % (rc, err, out))
     sauber(am)
 
 
@@ -309,7 +309,7 @@ def hicolor_ohne_p96():
 @test
 def hicolor_falsches_format():
     am, rc, out, err = lauf('cpkstest.cpks HICOLOR', rtg=karte())
-    pruefe(err is None and rc == 10 and 'Bildschirmformat' in out, '%r %r %r' % (rc, err, out))
+    pruefe(err is None and rc == 10 and 'screen format' in out, '%r %r %r' % (rc, err, out))
     sauber(am)
 
 
@@ -317,17 +317,17 @@ def hicolor_falsches_format():
 def rtg_vollbild_und_zurueck():
     am, rc, out, err = lauf('goku12b.cpks STATS NOAUDIO', rtg=karte(), us_per_byte=0,
                             tasten=((1e6, 13), (2e6, 13), (3e6, 27)))
-    pruefe(err is None and rc == 0 and '[OK] Wiedergabe beendet' in out, '%r %r %r' % (rc, err, out[-400:]))
+    pruefe(err is None and rc == 0 and '[OK] playback finished' in out, '%r %r %r' % (rc, err, out[-400:]))
     orte = sorted(set(b[2:4] for b in am.rtg_bilder))
     pruefe((160, 150) in orte and (4, 11) in orte, 'Bildorte %r' % orte)
-    pruefe(getattr(am, 'closed_rtg_screen', None) is not None, 'kein Grafikkartenschirm geoeffnet')
+    pruefe(getattr(am, 'closed_rtg_screen', None) is not None, 'no graphics card screen opened')
     sauber(am)
 
 
 @test
 def rtg_bench():
     am, rc, out, err = lauf('goku12b.cpks BENCH=60', rtg=karte(), us_per_byte=0.35)
-    pruefe(err is None and rc == 0 and 'BENCH: 60 Bilder' in out, '%r %r %r' % (rc, err, out[-300:]))
+    pruefe(err is None and rc == 0 and 'BENCH: 60 frames' in out, '%r %r %r' % (rc, err, out[-300:]))
     P.vergleiche_hashes([b[1] for b in am.rtg_bilder], rtg_golden('goku12b.cpks', 'rgb32')[:60], 'Golden RTG')
     sauber(am)
 
@@ -335,7 +335,7 @@ def rtg_bench():
 @test
 def dham8_chip_knapp():
     am, rc, out, err = lauf('cpkstest.cpks DHAM8 NOAUDIO', chip_kb=160)
-    pruefe(err is None and rc == 10 and 'Chip-RAM' in out and 'z. B.: DHAM6  oder  HAM6' in out,
+    pruefe(err is None and rc == 10 and 'chip RAM' in out and 'e.g.: DHAM6  or  HAM6' in out,
            '%r %r %r' % (rc, err, out))
     sauber(am)
 
@@ -354,20 +354,20 @@ def anzeige_dham8():
     am, rc, out, err, h = dekodiere('cpkstest.cpks', 'dham8')
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
     P.vergleiche_hashes(h, golden('cpkstest.cpks', 'dham8'), 'Golden')
-    z = zeile(out, 'Anzeige:')
-    pruefe(' HAM' in z and 'BPLCON0 0x8a10' in z and 'Steuerplanes nach dem Oeffnen 0x0000' in z, z)
+    z = zeile(out, 'Display:')
+    pruefe(' HAM' in z and 'BPLCON0 0x8a10' in z and 'control planes after opening 0x0000' in z, z)
     pruefe(am.palette == ('rgb32', [(i * 255 // 63,) * 3 for i in range(64)]), 'Palette %r' % (am.palette,))
-    pruefe(am.closed_window['tags'].get(ndk.WA_Width) == 640, 'Fenster %r' % am.closed_window['tags'])
-    pruefe(am.closed_screen['tags'].get(ndk.SA_BackFill) == ndk.LAYERS_NOBACKFILL, 'Schirm mit Backfill')
-    pruefe(am.semaphoren == 0, 'Semaphore nicht freigegeben')
+    pruefe(am.closed_window['tags'].get(ndk.WA_Width) == 640, 'window %r' % am.closed_window['tags'])
+    pruefe(am.closed_screen['tags'].get(ndk.SA_BackFill) == ndk.LAYERS_NOBACKFILL, 'screen with backfill')
+    pruefe(am.semaphoren == 0, 'semaphores not released')
     sauber(am)
 
 
 @test
 def anzeige_gray8():
     am, rc, out, err, h = dekodiere('cpkstest.cpks', 'gray8')
-    z = zeile(out, 'Anzeige:')
-    pruefe(err is None and rc == 0 and 'ohne HAM' in z and 'BPLCON0 0x0210' in z, z or out[-400:])
+    z = zeile(out, 'Display:')
+    pruefe(err is None and rc == 0 and 'without HAM' in z and 'BPLCON0 0x0210' in z, z or out[-400:])
     sauber(am)
 
 
@@ -375,7 +375,7 @@ def anzeige_gray8():
 def anzeige_dham6_ham6():
     for modus, bpl in (('dham6', 'BPLCON0 0xea00'), ('ham6', 'BPLCON0 0x6a00')):
         am, rc, out, err, h = dekodiere('cpkstest.cpks', modus)
-        z = zeile(out, 'Anzeige:')
+        z = zeile(out, 'Display:')
         pruefe(err is None and rc == 0 and bpl in z, '%s: %s' % (modus, z or out[-400:]))
         pruefe(am.palette == ('rgb32', [(i * 17,) * 3 for i in range(16)]), 'Palette %s' % modus)
         sauber(am)
@@ -387,10 +387,88 @@ def anzeige_dham6_ham6():
 def ton_goku12b_mono8():
     data = open(P.CLIPS['goku12b.cpks'], 'rb').read()
     am, rc, out, err = lauf('goku12b.cpks NOVIDEO STATS')
-    pruefe(err is None and rc == 0 and '[OK] Wiedergabe beendet' in out, '%r %r %r' % (rc, err, out[-400:]))
+    pruefe(err is None and rc == 0 and '[OK] playback finished' in out, '%r %r %r' % (rc, err, out[-400:]))
     dev = P.pruefe_paula(am, data)
     pruefe(59.5 <= am.now / 1e6 <= 62.0, 'Laufzeit %.2f s' % (am.now / 1e6))
     pruefe(max(dev.leer.values()) == 0, 'Paula lief leer: %r' % dev.leer)
+    sauber(am)
+
+
+# --- AHI as the second sound path ---------------------------------------------
+
+@test
+def ahi_goku12b_mono8():
+    """AHI instead of Paula: the device gets the stream interleaved and signed,
+    the clock runs on the completions as before, and nothing runs dry."""
+    data = open(P.CLIPS['goku12b.cpks'], 'rb').read()
+    am, rc, out, err = lauf('goku12b.cpks NOVIDEO STATS AHI', ahi=(0,))
+    pruefe(err is None and rc == 0 and '[OK] playback finished' in out,
+           '%r %r %r' % (rc, err, out[-400:]))
+    dev = P.pruefe_ahi(am, data)
+    pruefe('AHI unit 0' in out, out[:400])
+    pruefe('Sound: AHI unit 0x00,' in out, out[-900:])
+    pruefe(dev.leer == 0, 'AHI ran dry %dx' % dev.leer)
+    pruefe(59.5 <= am.now / 1e6 <= 62.0, 'run time %.2f s' % (am.now / 1e6))
+    pruefe(am.devices['audio.device'].puffer[1] == 0, 'Paula got something as well')
+    sauber(am)
+
+
+@test
+def ahi_unit_7():
+    """AHIUNIT=n goes to OpenDevice - the unit the user asked for, not 0."""
+    am, rc, out, err = lauf('goku12b.cpks NOVIDEO STATS AHI AHIUNIT=7', ahi=(7,))
+    pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
+    pruefe(am.devices['ahi.device'].unit_offen == 7,
+           'unit %r' % am.devices['ahi.device'].unit_offen)
+    pruefe('Sound: AHI unit 0x07,' in out, out[-900:])
+    sauber(am)
+
+
+@test
+def ahi_fehlt():
+    """No ahi.device: reason, suggestion and return code 10 - no silent Paula.
+    That is the whole point of making AHI an option."""
+    am, rc, out, err = lauf('goku12b.cpks NOVIDEO AHI')
+    pruefe(err is None and rc == 10, '%r %r %r' % (rc, err, out[-400:]))
+    pruefe('Mode "Sound" not available: ahi.device could not be opened' in out
+           and 'e.g.: (no options)' in out, out)
+    pruefe(am.devices['audio.device'].puffer[1] == 0, 'Paula played all the same')
+    sauber(am)
+
+
+@test
+def ahi_falsche_unit():
+    """ahi.device is there but does not open the requested unit: likewise 10."""
+    am, rc, out, err = lauf('goku12b.cpks NOVIDEO AHI AHIUNIT=3', ahi=(0,))
+    pruefe(err is None and rc == 10 and 'ahi.device could not be opened' in out,
+           '%r %r %r' % (rc, err, out[-400:]))
+    sauber(am)
+
+
+@test
+def ahi_unit_ungueltig():
+    """AHIUNIT=300 is not a unit - invalid call, return code 20 like ABUF=0."""
+    am, rc, out, err = lauf('goku12b.cpks NOVIDEO AHI AHIUNIT=300', ahi=(0,))
+    pruefe(err is None and rc == 20 and 'AHIUNIT has to be' in out,
+           '%r %r %r' % (rc, err, out))
+    sauber(am)
+
+
+@test
+def ahi_16bit_stereo():
+    """The case AHI exists for: 16 bit stereo stays 16 bit. Paula would throw
+    the low byte away, here every byte arrives - byte-swapped into m68k word
+    order, interleaved as the stream has it."""
+    data = P.cpks_mit_ton(22050, 2, 16, 6, 4711)
+    am, rc, out, err = lauf('test.cpks NOVIDEO STATS AHI', ahi=(0,),
+                            files={'test.cpks': P.als_datei(data)})
+    pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
+    pruefe('22050 Hz, 2 channels, 16 bit' in out, out[:400])
+    P.pruefe_ahi(am, data)
+    pruefe(am.devices['ahi.device'].typ == ndk.AHIST_S16S,
+           'ahir_Type %r' % am.devices['ahi.device'].typ)
+    pruefe(am.devices['ahi.device'].freq == 22050,
+           'ahir_Frequency %r' % am.devices['ahi.device'].freq)
     sauber(am)
 
 
@@ -400,7 +478,7 @@ def spielen_goku12b_dham8_voll():
     am, rc, out, err, h = dekodiere('goku12b.cpks', 'dham8', args='STATS')
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
     P.vergleiche_hashes(h, golden('goku12b.cpks', 'dham8'), 'Golden')
-    pruefe('angezeigt 720, dekodiert 720, nicht angezeigt 0, ohne Dekodieren verworfen 0' in out, out[-800:])
+    pruefe('shown 720, decoded 720, not shown 0, dropped without decoding 0' in out, out[-800:])
     P.pruefe_paula(am, data)
     pruefe(59.5 <= am.now / 1e6 <= 62.0, 'Laufzeit %.2f s' % (am.now / 1e6))
     sauber(am)
@@ -414,11 +492,11 @@ def ton_hat_vorrang_dham8():
         am.hook_symbol('cvid_decode', lambda: setattr(am, 'now', am.now + 150000))
     am, rc, out, err = lauf('goku12b.cpks DHAM8 STATS', us_per_byte=0, after_load=after)
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
-    leer = int(re.search(r'(\d+)x leergelaufen', out).group(1))
+    leer = int(re.search(r'(\d+)x ran dry', out).group(1))
     pruefe(leer == 0, 'Paula %dx leer: %s' % (leer, out[-900:]))
-    m = re.search(r'Bildsprung: (\d+)x zum Keyframe', out)
-    pruefe(m and int(m.group(1)) > 10, 'kein Bildsprung: %s' % out[-900:])
-    pruefe(59.5 <= am.now / 1e6 <= 62.5, 'Laufzeit %.2f s (die Uhr stand)' % (am.now / 1e6))
+    m = re.search(r'Frame jump: (\d+)x to the keyframe', out)
+    pruefe(m and int(m.group(1)) > 10, 'no frame jump: %s' % out[-900:])
+    pruefe(59.5 <= am.now / 1e6 <= 62.5, 'run time %.2f s (the clock stood still)' % (am.now / 1e6))
     P.pruefe_paula(am, data)
     sauber(am)
 
@@ -429,16 +507,16 @@ def bench_60_bilder():
     am, rc, out, err, h = dekodiere('goku12b.cpks', 'dham8', args='BENCH=60', us_per_byte=0.35)
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
     P.vergleiche_hashes(h, golden('goku12b.cpks', 'dham8')[:60], 'Golden')
-    m = re.search(r'BENCH: (\d+) Bilder, Decoder je Bild (\d+) us, Decoderfehler: 0', out)
+    m = re.search(r'BENCH: (\d+) frames, decoder per frame (\d+) us, decoder errors: 0', out)
     pruefe(m and int(m.group(1)) == 60 and int(m.group(2)) > 0, out[-400:])
-    pruefe('[OK] Wiedergabe beendet' in out and 'audio.device' not in ' '.join(am.devices['audio.device'].__dict__.get('log', {}) and [] or []), out[-300:])
+    pruefe('[OK] playback finished' in out and 'audio.device' not in ' '.join(am.devices['audio.device'].__dict__.get('log', {}) and [] or []), out[-300:])
     sauber(am)
 
 
 @test
 def taste_esc_beendet():
     am, rc, out, err = lauf('goku12b.cpks STATS', us_per_byte=0, tasten=((3e6, 27),))
-    pruefe(err is None and rc == 0 and am.now < 4.5e6 and '[OK] Wiedergabe beendet' in out,
+    pruefe(err is None and rc == 0 and am.now < 4.5e6 and '[OK] playback finished' in out,
            '%r %r %.1f %r' % (rc, err, am.now / 1e6, out[-300:]))
     sauber(am)
 
@@ -464,9 +542,9 @@ def main():
             print('[FAIL] %s: %s' % (t.__name__, e), flush=True)
         except Exception:
             fehl += 1
-            print('[FAIL] %s: Ausnahme' % t.__name__, flush=True)
+            print('[FAIL] %s: exception' % t.__name__, flush=True)
             traceback.print_exc()
-    print('%d Tests, %d fehlgeschlagen' % (n, fehl))
+    print('%d tests, %d failed' % (n, fehl))
     return 1 if fehl else 0
 
 

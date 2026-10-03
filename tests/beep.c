@@ -81,24 +81,24 @@ int main(void)
     ULONG t0, t1;
 
     port = CreateMsgPort();
-    if (!port) { out("kein MsgPort\n"); return 20; }
+    if (!port) { out("no MsgPort\n"); return 20; }
 
     io = (struct IOAudio *)CreateIORequest(port, sizeof(struct IOAudio));
-    if (!io) { out("kein IORequest\n"); DeleteMsgPort(port); return 20; }
+    if (!io) { out("no IORequest\n"); DeleteMsgPort(port); return 20; }
 
     io->ioa_Request.io_Message.mn_Node.ln_Pri = 10;
     io->ioa_Data   = anychannel;
     io->ioa_Length = sizeof(anychannel);
 
     if (OpenDevice((CONST_STRPTR)"audio.device", 0, (struct IORequest *)io, 0)) {
-        out("audio.device liess sich nicht oeffnen\n");
+        out("audio.device could not be opened\n");
         DeleteIORequest((struct IORequest *)io); DeleteMsgPort(port);
         return 20;
     }
     outnum("belegte Kanalmaske: ", (long)(ULONG)io->ioa_Request.io_Unit);
 
     wave = (BYTE *)AllocVec(256, MEMF_CHIP | MEMF_CLEAR);
-    if (!wave) { out("kein Chip-RAM\n"); goto done; }
+    if (!wave) { out("no chip RAM\n"); goto done; }
 
     timer_up();
 

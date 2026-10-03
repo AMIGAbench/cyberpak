@@ -84,7 +84,7 @@ static int mode_decode(const char *fn)
     w = in->width & ~3u; h = in->height & ~3u; stride = STRIDE_ALIGN(w * 4u);
     fb = calloc((size_t)stride * h, 1);
     c  = cvid_open(w, h, CVID_OUT_RGB32);
-    if (!fb || !c) { puts("  kein Speicher"); return 2; }
+    if (!fb || !c) { puts("  no memory"); return 2; }
 
     for (;;) {
         cpks_pump(s, NULL);
@@ -105,12 +105,12 @@ static int mode_decode_avi(const char *fn)
     uint32_t w, h, stride, tot = 2166136261u, nf = 0;
     const uint8_t *d; uint32_t len;
 
-    f = fopen(fn, "rb"); if (!f) { puts("  nicht lesbar"); return 2; }
+    f = fopen(fn, "rb"); if (!f) { puts("  not readable"); return 2; }
     fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
     data = malloc(n);
     if (!data || fread(data, 1, n, f) != (size_t)n) return 2;
     fclose(f);
-    if (avi_open(&av, data, (uint32_t)n)) { puts("  kein AVI"); return 2; }
+    if (avi_open(&av, data, (uint32_t)n)) { puts("  no AVI"); return 2; }
 
     w = av.width & ~3u; h = av.height & ~3u; stride = STRIDE_ALIGN(w * 4u);
     fb = calloc((size_t)stride * h, 1);
@@ -148,12 +148,12 @@ static int mode_sim(const char *fn, double paula_dev)
     s = cpks_open(fn, 16, &err);
     if (!s) { printf("  cpks_open fehlgeschlagen, err=%d\n", err); return 2; }
     in = cpks_get_info(s);
-    if (!in->arate) { puts("  Strom ohne Ton - fuer --sim ungeeignet"); return 2; }
+    if (!in->arate) { puts("  stream without sound - unsuitable for --sim"); return 2; }
     tb    = in->timebase;
     prate = (double)in->arate * (1.0 + paula_dev / 1000.0);
 
     offs = (double *)malloc(cap * sizeof(double));
-    if (!offs) { puts("  kein Speicher"); return 2; }
+    if (!offs) { puts("  no memory"); return 2; }
 
     for (;;) {
         uint32_t pos, due, drop, i;
@@ -206,9 +206,9 @@ static int mode_sim(const char *fn, double paula_dev)
         drift = l / q - f / q;
     }
     printf("  Simuliert %.1f s, Paula %+.1f Promille\n", t, paula_dev);
-    printf("  Versatz Ton-Bild: max %+.0f ms\n", worst * 1000.0);
+    printf("  sound/picture offset: max %+.0f ms\n", worst * 1000.0);
     printf("  Drift erstes zu letztes Viertel: %+.0f ms\n", drift * 1000.0);
-    printf("  Bilder gezeigt %u, dekodiert %u, verworfen %u, Unterdeckungen %u\n",
+    printf("  frames shown %u, decoded %u, dropped %u, underruns %u\n",
            nshown, ndec, dropped, under);
     free(offs);
     cpks_close(s);
@@ -254,7 +254,7 @@ static int mode_skip(const char *fn)
             if (!cpks_next_video(s, NULL, NULL, &p, &key)) break;
             if (need_key) {
                 if (!key) {
-                    printf("  FEHLER: nach Sprung auf Nicht-Keyframe pts %u\n", p);
+                    printf("  ERROR: after the jump, on a non-keyframe pts %u\n", p);
                     bad = 1;
                 }
                 need_key = 0;
@@ -266,9 +266,9 @@ static int mode_skip(const char *fn)
 
     printf("  Sprungtest: %u Spruenge, %u Frames undekodiert verworfen, %u dekodiert\n",
            njump, dropped, ndec);
-    if (!njump) { puts("  FEHLER: kein einziger Sprung ausgeloest - Test greift nicht"); bad = 1; }
+    if (!njump) { puts("  ERROR: not a single jump triggered - the test does not bite"); bad = 1; }
     if (dropped + ndec != 360u && !bad) { /* informative only */ }
-    puts(bad ? "  ABWEICHUNG" : "  Sprung setzt immer auf einem Keyframe auf");
+    puts(bad ? "  DEVIATION" : "  the jump always resumes on a keyframe");
     cpks_close(s);
     return bad;
 }

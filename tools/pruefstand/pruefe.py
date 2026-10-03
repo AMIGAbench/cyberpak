@@ -14,7 +14,7 @@ import traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
-from amiga import Amiga, TimerDevice, AudioDevice, Pruefabbruch  # noqa: E402
+from amiga import Amiga, TimerDevice, AudioDevice, AhiDevice, Pruefabbruch  # noqa: E402
 import ndk  # noqa: E402
 import random  # noqa: E402
 import struct  # noqa: E402
@@ -47,7 +47,7 @@ def pruefe(bedingung, text):
 
 def lauf(args, fast=True, setup=None, after_load=None, chip_kb=2048, files=None, read_max=None,
          strict=False, us_per_byte=0.35, gfx_version=40, chipset='ecs', tasten=(), read_us=None,
-         cpu=None, fast_hi=False, setpatch=True, exe=None, ntsc=False, rtg=None):
+         cpu=None, fast_hi=False, setpatch=True, exe=None, ntsc=False, rtg=None, ahi=None):
     cpu = cpu or CPU
     am = Amiga(fast_kb=8192 if fast else 0, chip_kb=chip_kb, us_per_byte=us_per_byte,
                gfx_version=gfx_version, chipset=chipset, cpu=cpu, fast_hi=fast_hi, setpatch=setpatch,
@@ -56,6 +56,11 @@ def lauf(args, fast=True, setup=None, after_load=None, chip_kb=2048, files=None,
         am.strict_align()
     am.add_device(TimerDevice())
     am.add_device(AudioDevice())
+    # ahi.device only when a test asks for it: without it OpenDevice fails,
+    # which is exactly the machine without AHI (`ahi=()` = installed but no
+    # unit opens).
+    if ahi is not None:
+        am.add_device(AhiDevice(units=ahi))
     for t, code in tasten:
         am.taste(t, code)
     am.files.update(CLIPS)
@@ -75,7 +80,7 @@ def lauf(args, fast=True, setup=None, after_load=None, chip_kb=2048, files=None,
 
 def sauber(am, erlaubt=()):
     rest = [x for x in am.leaks() if not any(x.startswith(e) for e in erlaubt)]
-    pruefe(not rest, 'nicht freigegeben: ' + '; '.join(rest))
+    pruefe(not rest, 'not released: ' + '; '.join(rest))
 
 
 # --- Schritt 2: Geruest ------------------------------------------------------
@@ -103,7 +108,7 @@ def optionen_gueltig():
 def optionen_vorgaben():
     am, rc, out, err = lauf('gibtsnicht.cpks STATS')
     pruefe(err is None, err)
-    pruefe(rc == 20 and '5 Planes 4-4-2' in out and 'ABUF 32' in out and 'ANUM 16' in out, out)
+    pruefe(rc == 20 and '5 planes 4-4-2' in out and 'ABUF 32' in out and 'ANUM 16' in out, out)
     sauber(am)
 
 
@@ -119,7 +124,7 @@ def quiet_ohne_ausgabe():
 def ham6_und_gray():
     am, rc, out, err = lauf('goku12b.cpks HAM6 GRAY')
     pruefe(err is None, err)
-    pruefe(rc == 20 and 'schliessen sich aus' in out, '%r %r' % (rc, out))
+    pruefe(rc == 20 and 'mutually exclusive' in out, '%r %r' % (rc, out))
     sauber(am)
 
 
@@ -158,8 +163,8 @@ def workbench_start():
 
     am, rc, out, err = lauf('', setup=setup)
     pruefe(err is None, err)
-    pruefe(am.ports[info['reply']] == [info['msg']], 'Startnachricht nicht beantwortet')
-    pruefe(am.ports[info['port']] == [], 'Startnachricht nicht abgeholt')
+    pruefe(am.ports[info['reply']] == [info['msg']], 'start message not answered')
+    pruefe(am.ports[info['port']] == [], 'start message not collected')
     am.ports.pop(info['port'])
     am.ports.pop(info['reply'])
     sauber(am, erlaubt=('Forbid-Zaehler 1',))
@@ -239,16 +244,16 @@ def lese(data_or_name, args='', read_max=None, **kw):
 
 def vergleiche_strom(data, rec, out):
     kopf, bilder, ton, zugross = erwartung(data)
-    pruefe(len(rec['bilder']) == len(bilder), 'Bilder: %d statt %d' % (len(rec['bilder']), len(bilder)))
+    pruefe(len(rec['bilder']) == len(bilder), 'frames: %d instead of %d' % (len(rec['bilder']), len(bilder)))
     for i, (a, b) in enumerate(zip(rec['bilder'], bilder)):
-        pruefe(a == b, 'Bild %d weicht ab (pts %d/%d, key %d/%d, Laenge %d/%d)' % (
+        pruefe(a == b, 'frame %d differs (pts %d/%d, key %d/%d, length %d/%d)' % (
             i, a[0], b[0], a[1], b[1], len(a[2]), len(b[2])))
-    pruefe(bytes(rec['ton']) == ton, 'Ton: %d Bytes statt %d' % (len(rec['ton']), len(ton)))
+    pruefe(bytes(rec['ton']) == ton, 'sound: %d bytes instead of %d' % (len(rec['ton']), len(ton)))
     keys = sum(1 for b in bilder if b[1])
     blk = max(1, kopf[8] * (kopf[9] // 8)) if kopf else 1
-    soll = 'Strom: %d Bilder, %d Keyframes, %d Tonsamples' % (len(bilder), keys, len(ton) // blk)
-    pruefe(soll in out, 'erwartet %r in %r' % (soll, out))
-    pruefe((' %d zu gross' % zugross) in out, 'zu gross: %r' % out)
+    soll = 'Stream: %d frames, %d keyframes, %d audio samples' % (len(bilder), keys, len(ton) // blk)
+    pruefe(soll in out, 'expected %r in %r' % (soll, out))
+    pruefe((' %d too large' % zugross) in out, 'too large: %r' % out)
 
 
 def strom_test(clip):
@@ -319,25 +324,25 @@ def strom_kurze_reads():
 @test
 def strom_datei_fehlt():
     am, rc, out, err = lauf('gibtsnicht.cpks')
-    pruefe(err is None and rc == 20 and 'nicht oeffnen' in out, '%r %r %r' % (rc, err, out))
+    pruefe(err is None and rc == 20 and 'Cannot open or read' in out, '%r %r %r' % (rc, err, out))
     sauber(am)
 
 
 @test
 def strom_kein_cpks():
     am, rc, out, err, rec = lese(random.Random(3).randbytes(5000))
-    pruefe(err is None and rc == 20 and 'Kein CPKS' in out, '%r %r %r' % (rc, err, out))
+    pruefe(err is None and rc == 20 and 'Not a CPKS stream' in out, '%r %r %r' % (rc, err, out))
     sauber(am)
 
 
 @test
 def strom_zu_wenig_speicher():
     am, rc, out, err = lauf('goku12b.cpks', fast=False, chip_kb=200)
-    pruefe(err is None and rc == 20 and 'Zu wenig Speicher' in out, '%r %r %r' % (rc, err, out))
+    pruefe(err is None and rc == 20 and 'Not enough memory' in out, '%r %r %r' % (rc, err, out))
     sauber(am)
 
 
-# --- Schritt 4: Decoder -----------------------------------------------------
+# --- step 4: decoder --------------------------------------------------------
 
 GOLDEN = os.path.join(ROOT, 'tests/golden_planar')
 MODI = {'clut': '', 'gray': 'GRAY', 'ham6': 'HAM6'}
@@ -378,9 +383,9 @@ def dekodiere(clip_or_data, modus, strict=False, vorbau=True, zaehler=None):
 
 
 def vergleiche_hashes(ist, soll, was):
-    pruefe(len(ist) == len(soll), '%s: %d Bilder statt %d' % (was, len(ist), len(soll)))
+    pruefe(len(ist) == len(soll), '%s: %d frames instead of %d' % (was, len(ist), len(soll)))
     for i, (a, b) in enumerate(zip(ist, soll)):
-        pruefe(a == b, '%s: Bild %d weicht ab' % (was, i))
+        pruefe(a == b, '%s: frame %d differs' % (was, i))
 
 
 def golden_test(clip, modus, vorbau=True):
@@ -391,9 +396,9 @@ def golden_test(clip, modus, vorbau=True):
                                           zaehler=z)
         pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-300:]))
         vergleiche_hashes(ist, soll, 'Golden')
-        pruefe('Decoderfehler: 0' in out, out[-300:])
+        pruefe('decoder errors: 0' in out, out[-300:])
         if vorbau:
-            pruefe(z['vorbauen'] >= len(soll) // 2, 'nur %d-mal vorgebaut' % z['vorbauen'])
+            pruefe(z['vorbauen'] >= len(soll) // 2, 'only pre-built %d times' % z['vorbauen'])
         else:
             pruefe(z['vorbauen'] == 0, '%d-mal vorgebaut' % z['vorbauen'])
         sauber(am)
@@ -478,7 +483,7 @@ for _seed, _m, _vb in ((11, 'clut', True), (12, 'ham6', True), (13, 'gray', True
         soll = referenz_hashes(data, modus)
         am, rc, out, err, ist = dekodiere(data, modus, strict=True, vorbau=vorbau)
         pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-300:]))
-        vergleiche_hashes(ist, soll, 'Referenzdecoder')
+        vergleiche_hashes(ist, soll, 'reference decoder')
         sauber(am)
     _zt.__name__ = 'dekodieren_zufall_%d_%s%s' % (_seed, _m, '' if _vb else '_ohne_vorbau')
     test(_zt)
@@ -488,7 +493,7 @@ for _seed, _m, _vb in ((11, 'clut', True), (12, 'ham6', True), (13, 'gray', True
 def dekodieren_falsche_breite():
     data = cpks_datei([b'']).replace(struct.pack('>HH', 320, 180), struct.pack('>HH', 640, 180), 1)
     am, rc, out, err, ist = dekodiere(data, 'clut')
-    pruefe(err is None and rc == 10 and 'Bildgroesse' in out and 'nicht verfuegbar' in out, '%r %r %r' % (rc, err, out))
+    pruefe(err is None and rc == 10 and 'Picture size' in out and 'not available' in out, '%r %r %r' % (rc, err, out))
     sauber(am)
 
 
@@ -513,16 +518,45 @@ def paula_soll(kopf, ton):
     return bytes(ton[1::4]), bytes(ton[3::4])
 
 
+def ahi_soll(kopf, ton):
+    """What ahi.device has to receive: interleaved, signed, m68k word order.
+
+    8 bit only flips the sign, 16 bit swaps the bytes of every sample - and
+    keeps both of them, which is the point of the AHI path. Mono stays mono:
+    AHIST_M*S plays one channel on both sides, so nothing is duplicated.
+    """
+    ch, bits = kopf[8], kopf[9]
+    if bits == 8:
+        return bytes(b ^ 0x80 for b in ton)
+    out = bytearray(len(ton))
+    out[0::2] = ton[1::2]
+    out[1::2] = ton[0::2]
+    return bytes(out)
+
+
+def pruefe_ahi(am, data):
+    kopf, ton = tonpakete(data)
+    soll = ahi_soll(kopf, ton)
+    dev = am.devices['ahi.device']
+    pruefe(dev.unit is None, 'ahi.device not closed')
+    ist = bytes(dev.log)
+    fs = kopf[8] * (kopf[9] // 8)
+    n = (len(soll) // fs) * fs
+    pruefe(ist == soll[:n], 'AHI: %d bytes instead of %d%s' % (
+        len(ist), n, '' if len(ist) != n else ', content differs'))
+    return dev
+
+
 def pruefe_paula(am, data):
     kopf, ton = tonpakete(data)
     links, rechts = paula_soll(kopf, ton)
     dev = am.devices['audio.device']
-    pruefe(dev.allocated == 0, 'Kanaele nicht freigegeben')
+    pruefe(dev.allocated == 0, 'channels not released')
     l, r = bytes(dev.log[1]), bytes(dev.log[2])
-    for name, ist, soll in (('links', l, links), ('rechts', r, rechts)):
+    for name, ist, soll in (('left', l, links), ('right', r, rechts)):
         n = len(soll) & ~1
-        pruefe(ist == soll[:n], 'Paula %s: %d Bytes statt %d%s' % (
-            name, len(ist), n, '' if len(ist) != n else ', Inhalt verschieden'))
+        pruefe(ist == soll[:n], 'Paula %s: %d bytes instead of %d%s' % (
+            name, len(ist), n, '' if len(ist) != n else ', content differs'))
     return dev
 
 
@@ -531,7 +565,7 @@ def ton_test(name, clip, args, dauer=None):
         data = open(CLIPS[clip], 'rb').read()
         am, rc, out, err = lauf('%s %s' % (clip, args))
         pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
-        pruefe('[OK] Wiedergabe beendet' in out, out[-400:])
+        pruefe('[OK] playback finished' in out, out[-400:])
         dev = pruefe_paula(am, data)
         if dauer:
             pruefe(dauer[0] <= am.now / 1e6 <= dauer[1], 'Laufzeit %.2f s' % (am.now / 1e6))
@@ -605,9 +639,9 @@ def schirm_ham6_cpkstest():
     vergleiche_hashes(h, golden('cpkstest.cpks', 'ham6'), 'Golden')
     sc = am.closed_screen
     pruefe(sc and sc['mode'] == 0x21800 and sc['depth'] == 6, 'Schirm %r' % sc)
-    pruefe(am.palette == ('rgb32', [(i * 17,) * 3 for i in range(16)]), 'Palette %r' % (am.palette,))
+    pruefe(am.palette == ('rgb32', [(i * 17,) * 3 for i in range(16)]), 'palette %r' % (am.palette,))
     pruefe(am.closed_window['idcmp'] == 0x00200400, 'IDCMP %x' % am.closed_window['idcmp'])
-    pruefe('Modus 0x00021800' in out and 'Speicher: Hunks' in out, out[-600:])
+    pruefe('mode 0x00021800' in out and 'Memory: hunks' in out, out[-600:])
     sauber(am)
 
 
@@ -618,7 +652,7 @@ def schirm_clut_loadrgb4():
     vergleiche_hashes(h, golden('cpkstest.cpks', 'clut'), 'Golden')
     soll = [((((i >> 3) * 85) >> 4) * 17, ((((i >> 1) & 3) * 85) >> 4) * 17, (((i & 1) * 255) >> 4) * 17)
             for i in range(32)]
-    pruefe(am.palette == ('rgb4', soll), 'Palette %r' % (am.palette,))
+    pruefe(am.palette == ('rgb4', soll), 'palette %r' % (am.palette,))
     pruefe(am.closed_screen['mode'] == 0x21000 and am.closed_screen['depth'] == 5, am.closed_screen)
     sauber(am)
 
@@ -628,7 +662,7 @@ def schirm_gray_palette():
     am, rc, out, err, h = schirm_lauf('cpkstest.cpks', 'gray')
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
     vergleiche_hashes(h, golden('cpkstest.cpks', 'gray'), 'Golden')
-    pruefe(am.palette == ('rgb32', [(i * 255 // 31,) * 3 for i in range(32)]), 'Palette %r' % (am.palette,))
+    pruefe(am.palette == ('rgb32', [(i * 255 // 31,) * 3 for i in range(32)]), 'palette %r' % (am.palette,))
     sauber(am)
 
 
@@ -638,7 +672,7 @@ def schirm_tiefe_fehlt():
         am.max_depth[0x21800] = 5
     am, rc, out, err, h = schirm_lauf('cpkstest.cpks', 'ham6', setup=setup)
     pruefe(err is None and rc == 10, '%r %r %r' % (rc, err, out))
-    pruefe('Modus "HAM6" nicht verfuegbar' in out and 'z. B.: NOVIDEO' in out, out)
+    pruefe('Mode "HAM6" not available' in out and 'e.g.: NOVIDEO' in out, out)
     sauber(am)
 
 
@@ -646,8 +680,8 @@ def schirm_tiefe_fehlt():
 def taste_esc_beendet():
     am, rc, out, err = lauf('goku12b.cpks STATS', us_per_byte=0, tasten=((3e6, 27),))
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
-    pruefe(am.now < 4.5e6, 'lief bis %.1f s' % (am.now / 1e6))
-    pruefe('[OK] Wiedergabe beendet' in out, out[-300:])
+    pruefe(am.now < 4.5e6, 'ran until %.1f s' % (am.now / 1e6))
+    pruefe('[OK] playback finished' in out, out[-300:])
     sauber(am)
 
 
@@ -657,8 +691,8 @@ def spielen_goku12b_voll():
     am, rc, out, err, h = schirm_lauf('goku12b.cpks', 'clut', args='STATS')
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
     vergleiche_hashes(h, golden('goku12b.cpks', 'clut'), 'Golden')
-    pruefe('angezeigt 720, dekodiert 720, nicht angezeigt 0, ohne Dekodieren verworfen 0' in out, out[-800:])
-    pruefe('661500 Samples' in out, out[-800:])
+    pruefe('shown 720, decoded 720, not shown 0, dropped without decoding 0' in out, out[-800:])
+    pruefe('661500 samples' in out, out[-800:])
     pruefe_paula(am, data)
     pruefe(59.5 <= am.now / 1e6 <= 62.0, 'Laufzeit %.2f s' % (am.now / 1e6))
     sauber(am)
@@ -677,12 +711,12 @@ def ton_hat_vorrang():
     am, rc, out, err = lauf('goku12b.cpks HAM6 STATS', us_per_byte=0, after_load=after)
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
     re_ = __import__('re')
-    leer = int(re_.search(r'(\d+)x leergelaufen', out).group(1))
-    pruefe(leer <= 1, 'Paula %dx leer: %s' % (leer, out[-900:]))
-    m = re_.search(r'Bildsprung: (\d+)x zum Keyframe, im Leser verworfen (\d+)', out)
-    pruefe(m and int(m.group(1)) > 10, 'kein Bildsprung: %s' % out[-900:])
-    pruefe(59.5 <= am.now / 1e6 <= 62.5, 'Laufzeit %.2f s (die Uhr stand)' % (am.now / 1e6))
-    pruefe('661500 Samples' in out, out[-900:])
+    leer = int(re_.search(r'(\d+)x ran dry', out).group(1))
+    pruefe(leer <= 1, 'Paula ran dry %dx: %s' % (leer, out[-900:]))
+    m = re_.search(r'Frame jump: (\d+)x to the keyframe, dropped in the reader (\d+)', out)
+    pruefe(m and int(m.group(1)) > 10, 'no frame jump: %s' % out[-900:])
+    pruefe(59.5 <= am.now / 1e6 <= 62.5, 'run time %.2f s (the clock stood still)' % (am.now / 1e6))
+    pruefe('661500 samples' in out, out[-900:])
     pruefe_paula(am, data)
     sauber(am)
 
@@ -698,19 +732,19 @@ def ham6_anzeige():
     am, rc, out, err, h = schirm_lauf('cpkstest.cpks', 'ham6')
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
     vergleiche_hashes(h, golden('cpkstest.cpks', 'ham6'), 'Golden')
-    zeile = next((l for l in out.splitlines() if 'Anzeige:' in l), '')
-    pruefe(' HAM' in zeile and 'BPLCON0 0x6a00' in zeile and 'Steuerplanes nach dem Oeffnen 0x0000' in zeile, zeile)
-    pruefe(am.closed_window['tags'].get(ndk.WA_BackFill) == ndk.LAYERS_NOBACKFILL, 'Fenster mit Backfill')
-    pruefe(am.closed_screen['tags'].get(ndk.SA_BackFill) == ndk.LAYERS_NOBACKFILL, 'Schirm mit Backfill')
-    pruefe(am.semaphoren == 0, 'Semaphore nicht freigegeben')
+    zeile = next((l for l in out.splitlines() if 'Display:' in l), '')
+    pruefe(' HAM' in zeile and 'BPLCON0 0x6a00' in zeile and 'control planes after opening 0x0000' in zeile, zeile)
+    pruefe(am.closed_window['tags'].get(ndk.WA_BackFill) == ndk.LAYERS_NOBACKFILL, 'window with backfill')
+    pruefe(am.closed_screen['tags'].get(ndk.SA_BackFill) == ndk.LAYERS_NOBACKFILL, 'screen with backfill')
+    pruefe(am.semaphoren == 0, 'semaphores not released')
     sauber(am)
 
 
 @test
 def anzeige_5planes():
     am, rc, out, err, h = schirm_lauf('cpkstest.cpks', 'clut')
-    zeile = next((l for l in out.splitlines() if 'Anzeige:' in l), '')
-    pruefe(err is None and rc == 0 and 'ohne HAM' in zeile and 'BPLCON0 0x5200' in zeile
+    zeile = next((l for l in out.splitlines() if 'Display:' in l), '')
+    pruefe(err is None and rc == 0 and 'without HAM' in zeile and 'BPLCON0 0x5200' in zeile
            and 'VP 0x00021000' in zeile, zeile or out[-400:])
     sauber(am)
 
@@ -723,7 +757,7 @@ for _rd in (1, 4, 16):
         am, rc, out, err, rec = lese(data, args='READ=%d' % rd)
         pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-300:]))
         vergleiche_strom(data, rec, out)
-        pruefe('bis %d KB' % rd in out, out[-500:])
+        pruefe('of up to %d KB' % rd in out, out[-500:])
         sauber(am)
     _lk.__name__ = 'strom_read_%d' % _rd
     test(_lk)
@@ -733,7 +767,7 @@ for _rd in (1, 4, 16):
 def read_ungueltig():
     for w in ('3', '0', '128'):
         am, rc, out, err = lauf('gibtsnicht.cpks READ=%s' % w)
-        pruefe(err is None and rc == 20 and 'READ muss' in out, 'READ=%s: %r %r %r' % (w, rc, err, out))
+        pruefe(err is None and rc == 20 and 'READ has to be' in out, 'READ=%s: %r %r %r' % (w, rc, err, out))
         sauber(am)
 
 
@@ -742,7 +776,7 @@ def netz_lauf(read_kb):
     am, rc, out, err = lauf('goku12b.cpks NOVIDEO STATS READ=%d' % read_kb, us_per_byte=0,
                             read_us=lambda n: n * 1e6 / 55000)
     pruefe(err is None and rc == 0, '%r %r %r' % (rc, err, out[-400:]))
-    zeile = next((l for l in out.splitlines() if 'Lesen:' in l), '')
+    zeile = next((l for l in out.splitlines() if 'Read:' in l), '')
     werte = [int(x) for x in __import__('re').findall(r'(\d+)', zeile)]
     sauber(am)
     return zeile, werte
@@ -781,9 +815,9 @@ def main():
             print('[FAIL] %s: %s' % (t.__name__, e))
         except Exception:
             fehl += 1
-            print('[FAIL] %s: Ausnahme' % t.__name__)
+            print('[FAIL] %s: exception' % t.__name__)
             traceback.print_exc()
-    print('%d Tests, %d fehlgeschlagen' % (n, fehl))
+    print('%d tests, %d failed' % (n, fehl))
     return 1 if fehl else 0
 
 

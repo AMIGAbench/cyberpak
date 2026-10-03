@@ -39,13 +39,13 @@ def main():
         am.hook_symbol('pumpen', pumpen)
     am, rc, out, err = pruefe.lauf('%s %s STATS' % (a.clip, a.modus), after_load=after, us_per_byte=0)
     if err:
-        print('[PRUEFSTAND] Abbruch:', err)
+        print('[TEST RIG] aborted:', err)
         return 1
     for zeile in out.splitlines():
-        if re.search(r'Zeit:|PLANAR:|Verzug|angezeigt|Ton: Kanal|Speicher', zeile):
+        if re.search(r'Time:|PLANAR:|Lateness|shown|Sound: channel|Memory', zeile):
             print(zeile)
     dev = am.devices['audio.device']
-    print('  Paula leergelaufen (Pruefstand): links %d, rechts %d; Laufzeit %.2f s; Rueckgabe %s' % (
+    print('  Paula ran dry (test rig): left %d, right %d; run time %.2f s; return %s' % (
         dev.leer[1], dev.leer[2], am.now / 1e6, rc))
     return 0
 

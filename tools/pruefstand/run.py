@@ -37,18 +37,18 @@ def main():
         code = am.run(a.programm, ' '.join(prog_args))
     except Pruefabbruch as e:
         sys.stdout.write(am.stdout.decode('latin-1'))
-        print('[PRUEFSTAND] Abbruch: %s' % e)
+        print('[TEST RIG] aborted: %s' % e)
         return 1
     sys.stdout.write(am.stdout.decode('latin-1'))
-    print('[PRUEFSTAND] Rueckgabe %d, virtuelle Zeit %.1f ms' % (code, am.now / 1000))
+    print('[TEST RIG] return %d, virtual time %.1f ms' % (code, am.now / 1000))
     for h in am.hunks:
-        print('[PRUEFSTAND] Hunk 0x%06x %6d Byte %s' % h)
+        print('[TEST RIG] hunk 0x%06x %6d bytes %s' % h)
     if a.calls:
         for k in sorted(am.calls):
-            print('[PRUEFSTAND]   %-28s %d' % (k, am.calls[k]))
+            print('[TEST RIG]   %-28s %d' % (k, am.calls[k]))
     lk = am.leaks()
     for x in lk:
-        print('[PRUEFSTAND] NICHT FREIGEGEBEN: %s' % x)
+        print('[TEST RIG] NOT RELEASED: %s' % x)
         rc = 1
     return rc
 

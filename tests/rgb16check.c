@@ -26,10 +26,10 @@ int main(int argc, char **argv)
     uint32_t w,h,s32,s16,nf=0,bad=0; const uint8_t *d; uint32_t len;
     int fmt = argc>2 ? atoi(argv[2]) : 0;
 
-    f=fopen(argv[1],"rb"); if(!f){puts("nicht lesbar");return 2;}
+    f=fopen(argv[1],"rb"); if(!f){puts("not readable");return 2;}
     fseek(f,0,SEEK_END); n=ftell(f); fseek(f,0,SEEK_SET);
     data=malloc(n); if(fread(data,1,n,f)!=(size_t)n) return 2; fclose(f);
-    if(avi_open(&av,data,(uint32_t)n)){puts("kein AVI");return 2;}
+    if(avi_open(&av,data,(uint32_t)n)){puts("no AVI");return 2;}
 
     w=av.width&~3u; h=av.height&~3u;
     s32=STRIDE_ALIGN(w*4u); s16=STRIDE_ALIGN(w*2u);
@@ -58,11 +58,11 @@ int main(int argc, char **argv)
 #if !CPU_BIG_ENDIAN
                 got=((uint32_t)p16[x*2+1]<<8)|p16[x*2];
 #endif
-                if(want!=got){ if(bad<3) printf("  Frame %u (%u,%u): soll %04x ist %04x\n",nf,x,y,want,got); bad++; }
+                if(want!=got){ if(bad<3) printf("  frame %u (%u,%u): expected %04x got %04x\n",nf,x,y,want,got); bad++; }
             }
         }
         nf++;
     }
-    printf("  Format %d: %u Frames, %u abweichende Pixel\n", fmt, nf, bad);
+    printf("  format %d: %u frames, %u deviating pixels\n", fmt, nf, bad);
     return bad!=0;
 }

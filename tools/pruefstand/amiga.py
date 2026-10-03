@@ -106,7 +106,7 @@ class Amiga:
                  gfx_version=40, chipset='ecs', ntsc=False, cpu='68000', fast_hi=False, setpatch=True,
                  rtg=None):
         if fast_hi and cpu == '68000':
-            raise ValueError('Fast-RAM ueber 16 MB gibt es fuer den 68000 nicht')
+            raise ValueError('fast RAM above 16 MB does not exist for the 68000')
         self.u = u = Uc(UC_ARCH_M68K, UC_MODE_BIG_ENDIAN)
         u.ctl_set_cpu_model(CPU_MODELL[cpu])
         self.cpu = cpu
@@ -199,9 +199,9 @@ class Amiga:
     def free_mem(self, addr, size, was='FreeMem'):
         rec = self.allocs.pop(addr, None)
         if rec is None:
-            raise Pruefabbruch('%s: 0x%06x ist nicht belegt' % (was, addr))
+            raise Pruefabbruch('%s: 0x%06x is not allocated' % (was, addr))
         if rec[0] != size:
-            raise Pruefabbruch('%s: 0x%06x mit Groesse %d freigegeben, belegt waren %d' % (
+            raise Pruefabbruch('%s: 0x%06x freed with size %d, %d was allocated' % (
                 was, addr, size, rec[0]))
         (self.chip if addr < CHIP_HI else self.fast).release(addr, size)
 
@@ -356,7 +356,7 @@ class Amiga:
     def _rtg_rastport(self, rp):
         w = self.window
         if not w or rp != self.rl(w['addr'] + ndk.wd_RPort):
-            raise Pruefabbruch('Zeichnen in einen RastPort 0x%06x, der zu keinem offenen Fenster gehoert' % rp)
+            raise Pruefabbruch('drawing into a RastPort 0x%06x that belongs to no open window' % rp)
         return w
 
     def _cgx_handlers(self):
@@ -376,14 +376,14 @@ class Amiga:
             elif attr == ndk.CYBRMATTR_BPPIX:
                 d(0, (info['depth'] + 7) // 8)
             else:
-                raise Pruefabbruch('GetCyberMapAttr: Attribut 0x%x nicht nachgebildet' % attr)
+                raise Pruefabbruch('GetCyberMapAttr: attribute 0x%x not reproduced' % attr)
 
         def write_pixel_array():
             src, sx, sy, mod, rp = a(0), d(0), d(1), d(2), a(1)
             dx, dy, w, h, fmt = d(3), d(4), d(5), d(6), d(7)
             self._rtg_rastport(rp)
             if fmt != ndk.RECTFMT_ARGB or sx or sy or mod != w * 4 or not w or not h:
-                raise Pruefabbruch('WritePixelArray: Format %d, Quelle %d/%d, SrcMod %d, %dx%d' % (fmt, sx, sy, mod, w, h))
+                raise Pruefabbruch('WritePixelArray: format %d, source %d/%d, SrcMod %d, %dx%d' % (fmt, sx, sy, mod, w, h))
             data = bytes(self.u.mem_read(src, mod * h))
             self.rtg_bilder.append(('argb', hashlib.md5(data).hexdigest(), dx, dy, w, h))
             d(0, w * h)
@@ -406,7 +406,7 @@ class Amiga:
             bpr = struct.unpack('>h', self.u.mem_read(ri + ndk.gri_BytesPerRow, 2))[0]
             fmt = self.rl(ri + ndk.gri_RGBFormat)
             if sx or sy or bpr != w * 2 or not w or not h:
-                raise Pruefabbruch('p96WritePixelArray: Quelle %d/%d, BytesPerRow %d, %dx%d' % (sx, sy, bpr, w, h))
+                raise Pruefabbruch('p96WritePixelArray: source %d/%d, BytesPerRow %d, %dx%d' % (sx, sy, bpr, w, h))
             data = bytes(self.u.mem_read(mem, bpr * h))
             self.rtg_bilder.append(('p96:%d' % fmt, hashlib.md5(data).hexdigest(), dx, dy, w, h))
         return {'p96WritePixelArray': p96_write_pixel_array}
@@ -438,13 +438,13 @@ class Amiga:
         base = min((b for b in self.libs_by_base if b > addr), default=None)
         lib = self.libs_by_base.get(base)
         if lib is None or (addr - base) not in lib.lvotab:
-            raise Pruefabbruch('Sprung in den Library-Bereich 0x%06x ohne Funktion' % addr)
+            raise Pruefabbruch('jump into the library area 0x%06x without a function' % addr)
         name = lib.lvotab[addr - base]
         key = '%s.%s' % (lib.name.split('.')[0], name)
         self.calls[key] = self.calls.get(key, 0) + 1
         fn = lib.handlers.get(name)
         if fn is None:
-            self.error = Pruefabbruch('nicht nachgebildet: %s' % key)
+            self.error = Pruefabbruch('not reproduced: %s' % key)
             uc.emu_stop()
             return
         if self.trace:
@@ -472,14 +472,14 @@ class Amiga:
         def close_library():
             lib = self.libs_by_base.get(a(1))
             if lib is None or lib.opencnt <= 0:
-                raise Pruefabbruch('CloseLibrary auf nicht geoeffnete Library 0x%06x' % a(1))
+                raise Pruefabbruch('CloseLibrary on a library that is not open 0x%06x' % a(1))
             lib.opencnt -= 1
 
         def wait():
             mask = d(0)
             while not (self.sigrecvd & mask):
                 if not self.events:
-                    raise Pruefabbruch('Wait(0x%08x) ohne jedes kommende Ereignis' % mask)
+                    raise Pruefabbruch('Wait(0x%08x) without any coming event' % mask)
                 t, _, _ = self.events[0]
                 self.now = max(self.now, t)
                 self.run_events()
@@ -524,7 +524,7 @@ class Amiga:
             if not p:
                 return
             if self.ports.get(p):
-                raise Pruefabbruch('DeleteMsgPort: Port 0x%06x hat noch %d Nachrichten' % (p, len(self.ports[p])))
+                raise Pruefabbruch('DeleteMsgPort: port 0x%06x still has %d messages' % (p, len(self.ports[p])))
             self.ports.pop(p, None)
             self.user_ports.discard(p)
             self.sigalloc &= ~(1 << self.rb(p + ndk.MP_SIGBIT))
@@ -533,14 +533,14 @@ class Amiga:
         def get_msg():
             q = self.ports.get(a(0))
             if q is None:
-                raise Pruefabbruch('GetMsg auf unbekanntem Port 0x%06x' % a(0))
+                raise Pruefabbruch('GetMsg on an unknown port 0x%06x' % a(0))
             d(0, q.pop(0) if q else 0)
 
         def wait_port():
             p = a(0)
             while not self.ports.get(p):
                 if not self.events:
-                    raise Pruefabbruch('WaitPort ohne kommendes Ereignis')
+                    raise Pruefabbruch('WaitPort without a coming event')
                 self.now = max(self.now, self.events[0][0])
                 self.run_events()
             d(0, self.ports[p][0])
@@ -563,7 +563,7 @@ class Amiga:
             r = a(0)
             if r:
                 if r in self.pending_io:
-                    raise Pruefabbruch('DeleteIORequest: Request 0x%06x laeuft noch' % r)
+                    raise Pruefabbruch('DeleteIORequest: request 0x%06x is still running' % r)
                 self.free_mem(r, self.rw(r + ndk.MN_LENGTH), 'DeleteIORequest')
 
         def open_device():
@@ -584,16 +584,16 @@ class Amiga:
             req = a(1)
             dev = self.dev_by_base.get(self.rl(req + ndk.IO_DEVICE))
             if dev is None or dev.opencnt <= 0:
-                raise Pruefabbruch('CloseDevice auf nicht geoeffnetem Request 0x%06x' % req)
+                raise Pruefabbruch('CloseDevice on a request that is not open 0x%06x' % req)
             if req in self.pending_io:
-                raise Pruefabbruch('CloseDevice: Request 0x%06x laeuft noch' % req)
+                raise Pruefabbruch('CloseDevice: request 0x%06x is still running' % req)
             dev.close(req)
             dev.opencnt -= 1
 
         def dev_of(req):
             dev = self.dev_by_base.get(self.rl(req + ndk.IO_DEVICE))
             if dev is None:
-                raise Pruefabbruch('IO auf Request 0x%06x ohne geoeffnetes Device' % req)
+                raise Pruefabbruch('IO on request 0x%06x without an open device' % req)
             return dev
 
         def send_io():
@@ -786,9 +786,9 @@ class Amiga:
 
         def unlock_pub_screen():
             if a(1) != self.wb_schirm or self.pub_locks <= 0:
-                raise Pruefabbruch('UnlockPubScreen auf nicht gesperrtem Schirm 0x%06x' % a(1))
+                raise Pruefabbruch('UnlockPubScreen on a screen that is not locked 0x%06x' % a(1))
             if self.window and self.window.get('pub'):
-                raise Pruefabbruch('UnlockPubScreen, waehrend ein Fenster darauf offen ist')
+                raise Pruefabbruch('UnlockPubScreen while a window is open on it')
             self.pub_locks -= 1
 
         def open_rtg_screen(tg):
@@ -807,11 +807,11 @@ class Amiga:
 
         def open_screen():
             if a(0):
-                raise Pruefabbruch('OpenScreenTagList mit NewScreen nicht nachgebildet')
+                raise Pruefabbruch('OpenScreenTagList with NewScreen not reproduced')
             tg = tags(a(1))
             if self.rtg is not None and (tg.get(ndk.SA_DisplayID, 0) & 0xF0000000) == 0x50000000:
                 if self.rtg_screen:
-                    raise Pruefabbruch('zweiter Grafikkartenschirm')
+                    raise Pruefabbruch('second graphics card screen')
                 open_rtg_screen(tg)
                 return
             if self.screen or self.screen_fail:
@@ -839,22 +839,22 @@ class Amiga:
             planes = [self.rl(bm + ndk.bm_Planes + 4 * k) for k in range(bdepth)]
             fehler = []
             if bdepth != depth:
-                fehler.append('BitMap-Tiefe %d, SA_Depth %d' % (bdepth, depth))
+                fehler.append('BitMap depth %d, SA_Depth %d' % (bdepth, depth))
             if bpr * 8 < tg.get(ndk.SA_Width, 0) or rows < tg.get(ndk.SA_Height, 0):
-                fehler.append('BitMap kleiner als der Schirm')
+                fehler.append('BitMap smaller than the screen')
             for k, pl in enumerate(planes):
                 if not (self.type_of_mem(pl) & ndk.MEMF_CHIP):
-                    fehler.append('Plane %d nicht im Chip-RAM' % k)
+                    fehler.append('plane %d not in chip RAM' % k)
                 if pl != planes[0] + k * bpr * rows:
-                    fehler.append('Plane %d nicht am Stueck' % k)
+                    fehler.append('plane %d not in one piece' % k)
             if depth == 6 and not (mode & ndk.HAM_KEY) and self.chipset == 'ecs':
-                fehler.append('6 Planes auf ECS ohne HAM')
+                fehler.append('6 planes on ECS without HAM')
             if mode not in self.modi():
-                fehler.append('Modus 0x%08x nicht in der Anzeigedatenbank' % mode)
+                fehler.append('mode 0x%08x not in the display database' % mode)
             elif depth > self.modi()[mode]:
-                fehler.append('Tiefe %d, der Modus kann %d' % (depth, self.modi()[mode]))
+                fehler.append('depth %d, the mode can do %d' % (depth, self.modi()[mode]))
             if tg.get(ndk.SA_Width, 0) > (640 if mode & ndk.HIRES_KEY else 320):
-                fehler.append('SA_Width %d passt nicht zu Modus 0x%08x' % (tg.get(ndk.SA_Width, 0), mode))
+                fehler.append('SA_Width %d does not fit mode 0x%08x' % (tg.get(ndk.SA_Width, 0), mode))
             if fehler and not eigene:
                 raise Pruefabbruch('OpenScreenTagList: ' + '; '.join(fehler))
             self.wl(scr + ndk.sc_RastPort + ndk.rp_BitMap, bm)
@@ -880,17 +880,17 @@ class Amiga:
         def close_screen():
             if self.rtg_screen and a(0) == self.rtg_screen['addr']:
                 if self.window and self.window.get('screen') == a(0):
-                    raise Pruefabbruch('CloseScreen vor CloseWindow')
+                    raise Pruefabbruch('CloseScreen before CloseWindow')
                 self.closed_rtg_screen, self.rtg_screen = self.rtg_screen, None
                 return
             if not self.screen or a(0) != self.screen['addr']:
-                raise Pruefabbruch('CloseScreen auf unbekanntem Schirm 0x%06x' % a(0))
+                raise Pruefabbruch('CloseScreen on an unknown screen 0x%06x' % a(0))
             if self.window:
-                raise Pruefabbruch('CloseScreen vor CloseWindow')
+                raise Pruefabbruch('CloseScreen before CloseWindow')
             sc = self.screen
             for k, pl in enumerate(sc['eigene']):
                 if self.rl(sc['bm'] + ndk.bm_Planes + 4 * k) != pl:
-                    raise Pruefabbruch('CloseScreen: Plane %d der Intuition-BitMap nicht zurueckgesetzt' % k)
+                    raise Pruefabbruch('CloseScreen: plane %d of the Intuition BitMap not restored' % k)
             size = sc['bpr'] * sc['rows'] + 8
             for pl in sc['eigene']:
                 self.free_mem(pl, size, 'Intuition')
@@ -902,14 +902,14 @@ class Amiga:
         def open_window():
             tg = tags(a(1))
             if self.window:
-                raise Pruefabbruch('zweites Fenster')
+                raise Pruefabbruch('second window')
             pub = tg.get(ndk.WA_PubScreen)
             rtgsc = self.rtg_screen and tg.get(ndk.WA_CustomScreen) == self.rtg_screen['addr']
             if pub is not None:
                 if pub != self.wb_schirm or self.pub_locks <= 0:
-                    raise Pruefabbruch('OpenWindowTagList auf nicht gesperrtem Public Screen')
+                    raise Pruefabbruch('OpenWindowTagList on a public screen that is not locked')
             elif not rtgsc and (not self.screen or tg.get(ndk.WA_CustomScreen) != self.screen['addr']):
-                raise Pruefabbruch('OpenWindowTagList ohne passenden Schirm')
+                raise Pruefabbruch('OpenWindowTagList without a matching screen')
             win = self.lib_alloc(256)
             self.u.mem_write(win, bytes(256))
             port = self.lib_alloc(ndk.MP_SIZE)
@@ -937,7 +937,7 @@ class Amiga:
         def close_window():
             w = self.window
             if not w or a(0) != w['addr']:
-                raise Pruefabbruch('CloseWindow auf unbekanntem Fenster')
+                raise Pruefabbruch('CloseWindow on an unknown window')
             self.ports.pop(w['port'], None)
             self.sigalloc &= ~(1 << w['sigbit'])
             self.closed_window, self.window = w, None
@@ -986,7 +986,7 @@ class Amiga:
     def put_msg(self, port, msg):
         q = self.ports.get(port)
         if q is None:
-            raise Pruefabbruch('Nachricht an unbekannten Port 0x%06x' % port)
+            raise Pruefabbruch('message to an unknown port 0x%06x' % port)
         q.append(msg)
         self.signal(1 << self.rb(port + ndk.MP_SIGBIT))
 
@@ -1001,7 +1001,7 @@ class Amiga:
     def wait_io(self, req):
         while req in self.pending_io:
             if not self.events:
-                raise Pruefabbruch('WaitIO: Request 0x%06x wird nie fertig' % req)
+                raise Pruefabbruch('WaitIO: request 0x%06x never finishes' % req)
             self.now = max(self.now, self.events[0][0])
             self.run_events()
         port = self.rl(req + ndk.MN_REPLYPORT)
@@ -1020,7 +1020,7 @@ class Amiga:
         def write():
             fh, buf, n = d(1), d(2), d(3)
             if fh != OUT:
-                raise Pruefabbruch('Write auf Handle 0x%x (nur Output() nachgebildet)' % fh)
+                raise Pruefabbruch('Write on handle 0x%x (only Output() is reproduced)' % fh)
             self.stdout += bytes(self.u.mem_read(buf, n))
             d(0, n)
 
@@ -1042,14 +1042,14 @@ class Amiga:
         def close():
             f = self.handles.pop(d(1), None)
             if f is None:
-                raise Pruefabbruch('Close auf unbekanntem Handle 0x%x' % d(1))
+                raise Pruefabbruch('Close on an unknown handle 0x%x' % d(1))
             f.close()
             d(0, ndk.DOSTRUE & 0xFFFFFFFF)
 
         def read():
             f = self.handles.get(d(1))
             if f is None:
-                raise Pruefabbruch('Read auf unbekanntem Handle 0x%x' % d(1))
+                raise Pruefabbruch('Read on an unknown handle 0x%x' % d(1))
             n = d(3)
             if self.read_max is not None:
                 n = max(1, min(n, self.read_max()))
@@ -1156,7 +1156,7 @@ class Amiga:
             return
         recs = getattr(self, '_rdargs', {}).pop(rda, None)
         if recs is None:
-            raise Pruefabbruch('FreeArgs auf unbekanntem RDArgs 0x%06x' % rda)
+            raise Pruefabbruch('FreeArgs on an unknown RDArgs 0x%06x' % rda)
         for p, s in recs:
             self.free_mem(p, s, 'intern')
         self.free_mem(rda, 32, 'ReadArgs')
@@ -1173,9 +1173,9 @@ class Amiga:
             pos += 4
             return v
         if rdl() != HUNK_HEADER:
-            raise ValueError('kein Hunk-Programm')
+            raise ValueError('not a hunk program')
         while rdl():
-            raise ValueError('Resident-Namen nicht unterstuetzt')
+            raise ValueError('resident names are not supported')
         count, first, last = rdl(), rdl(), rdl()
         addrs, sizes, blocks = [], [], []
         for i in range(count):
@@ -1191,7 +1191,7 @@ class Amiga:
             n = (s & 0x3FFFFFFF) * 4
             a = self.alloc_mem(n + 8, flags | ndk.MEMF_CLEAR, 'LoadSeg')
             if not a:
-                raise Pruefabbruch('LoadSeg: kein Speicher fuer Hunk %d (%d Byte, Flags 0x%x)' % (i, n, flags))
+                raise Pruefabbruch('LoadSeg: no memory for hunk %d (%d bytes, flags 0x%x)' % (i, n, flags))
             addrs.append(a + 8)
             sizes.append(n)
             blocks.append((a, n + 8))
@@ -1250,7 +1250,7 @@ class Amiga:
             elif t == HUNK_END:
                 h += 1
             else:
-                raise ValueError('Hunk-Typ 0x%x nicht unterstuetzt' % t)
+                raise ValueError('hunk type 0x%x is not supported' % t)
         return addrs
 
     def strict_align(self):
@@ -1260,7 +1260,7 @@ class Amiga:
 
         def chk(uc, acc, addr, size, val, ud):
             if size > 1 and addr & 1 and self.error is None:
-                self.error = Pruefabbruch('Address Error: %d-Byte-Zugriff auf 0x%06x, PC 0x%06x' % (
+                self.error = Pruefabbruch('address error: %d byte access at 0x%06x, PC 0x%06x' % (
                     size, addr, uc.reg_read(UC_M68K_REG_PC)))
                 uc.emu_stop()
         self.u.hook_add(UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, chk, begin=0, end=0xBFFFFF)
@@ -1268,7 +1268,7 @@ class Amiga:
     def hook_symbol(self, name, fn):
         """Run fn() before the instruction at the symbol `name` runs."""
         if name not in self.symbols:
-            raise Pruefabbruch('Symbol %s fehlt (Programm ohne Symbole gebaut?)' % name)
+            raise Pruefabbruch('symbol %s is missing (program built without symbols?)' % name)
         a = self.symbols[name]
         self.u.hook_add(UC_HOOK_CODE, lambda uc, addr, size, ud: fn(), begin=a, end=a)
 
@@ -1301,22 +1301,22 @@ class Amiga:
                 out.append('%s 0x%06x %d Byte' % (was, a, size))
         for lib in self.libs_by_base.values():
             if lib.opencnt:
-                out.append('%s noch %dx offen' % (lib.name, lib.opencnt))
+                out.append('%s still open %dx' % (lib.name, lib.opencnt))
         for dev in self.devices.values():
             if getattr(dev, 'opencnt', 0):
-                out.append('%s noch %dx offen' % (dev.name, dev.opencnt))
+                out.append('%s still open %dx' % (dev.name, dev.opencnt))
         if self.user_ports:
-            out.append('%d Ports nicht geloescht' % len(self.user_ports))
+            out.append('%d ports not deleted' % len(self.user_ports))
         if self.screen:
-            out.append('Schirm nicht geschlossen')
+            out.append('screen not closed')
         if self.rtg_screen:
-            out.append('Grafikkartenschirm nicht geschlossen')
+            out.append('graphics card screen not closed')
         if self.pub_locks:
-            out.append('Public Screen noch %dx gesperrt' % self.pub_locks)
+            out.append('public screen still locked %dx' % self.pub_locks)
         if self.window:
-            out.append('Fenster nicht geschlossen')
+            out.append('window not closed')
         if self.handles:
-            out.append('%d Dateien nicht geschlossen' % len(self.handles))
+            out.append('%d files not closed' % len(self.handles))
         if self.forbid:
             out.append('Forbid-Zaehler %d' % self.forbid)
         return out
@@ -1372,7 +1372,7 @@ class TimerDevice:
         elif unit == ndk.UNIT_WAITECLOCK:
             t = ((s << 32) | us) * 1e6 / ECLOCK_FREQ
         else:
-            raise Pruefabbruch('timer.device: Einheit %s nicht nachgebildet' % unit)
+            raise Pruefabbruch('timer.device: unit %s not reproduced' % unit)
         am.wb(req + ndk.IO_ERROR, 0)
         am.pending_io[req] = self
         am.at(max(t, am.now), lambda: am.reply_io(req) if req in am.pending_io else None)
@@ -1382,6 +1382,115 @@ class TimerDevice:
         if req in am.pending_io:
             am.wb(req + ndk.IO_ERROR, ndk.IOERR_ABORTED & 0xFF)
             am.reply_io(req)
+        return 0
+
+
+class AhiDevice:
+    """ahi.device in device mode: CMD_WRITE with ahir_Link.
+
+    The autodoc (ahi.device/CMD_WRITE) says the link points BACKWARDS at a
+    request already sent, and this request is delayed until that one has
+    finished. The stub models exactly that, because the player's clock depends
+    on it: it counts the completions, and it may only count them in the order
+    in which the sound really runs.
+
+    Checked here, because getting it wrong is silent on a desktop and audible
+    on the Amiga: length a multiple of the frame size, io_Offset 0, volume and
+    position inside their range, and a link that points at a request that is
+    really still outstanding. `log` collects everything played, so a test can
+    compare it with the stream (interleaved, signed, big endian).
+    """
+    name = 'ahi.device'
+    TYPES = {ndk.AHIST_M8S: (1, 1), ndk.AHIST_S8S: (2, 1),
+             ndk.AHIST_M16S: (1, 2), ndk.AHIST_S16S: (2, 2)}
+
+    def __init__(self, units=(0,)):
+        self.units = set(units)      # which units open; empty = none at all
+        self.unit = None             # open right now
+        self.unit_offen = None       # which unit it was (survives close)
+        self.version = 0
+        self.log = bytearray()
+        self.busy = 0.0              # when the chain is finished
+        self.leer = 0                # how often it ran dry in between
+        self.puffer = 0
+        self.ende = {}               # request -> end of its piece
+        self.typ = None
+        self.freq = None
+        self.lvotab = {}
+        self.handlers = {}
+
+    def open(self, req, unit, flags):
+        am = self.am
+        if unit not in self.units:
+            return ndk.IOERR_OPENFAIL & 0xFF
+        self.version = am.rw(req + ndk.ahir_Version)
+        if self.version < 4:
+            raise Pruefabbruch('ahi.device: ahir_Version %d (CMD_WRITE needs 4)'
+                               % self.version)
+        self.unit = unit
+        self.unit_offen = unit
+        return 0
+
+    def close(self, req):
+        self.unit = None
+
+    def begin_io(self, req):
+        am = self.am
+        cmd = am.rw(req + ndk.IO_COMMAND)
+        am.wb(req + ndk.IO_ERROR, 0)
+        if cmd != ndk.CMD_WRITE:
+            am.wb(req + ndk.IO_ERROR, ndk.IOERR_NOCMD & 0xFF)
+            am.reply_io(req)
+            return
+        data = am.rl(req + ndk.IO_DATA)
+        ln   = am.rl(req + ndk.IO_LENGTH)
+        off  = am.rl(req + ndk.IO_OFFSET)
+        typ  = am.rl(req + ndk.ahir_Type)
+        freq = am.rl(req + ndk.ahir_Frequency)
+        vol  = am.rl(req + ndk.ahir_Volume)
+        pos  = am.rl(req + ndk.ahir_Position)
+        link = am.rl(req + ndk.ahir_Link)
+        if typ not in self.TYPES:
+            raise Pruefabbruch('ahi.device: ahir_Type %d not reproduced' % typ)
+        chans, breite = self.TYPES[typ]
+        fs = chans * breite
+        if off:
+            raise Pruefabbruch('ahi.device: io_Offset %d (has to be 0)' % off)
+        if ln == 0 or ln % fs:
+            raise Pruefabbruch('ahi.device: io_Length %d is not a multiple of the '
+                               'frame size %d' % (ln, fs))
+        if not 0 <= vol <= 0x10000:
+            raise Pruefabbruch('ahi.device: ahir_Volume 0x%x out of range' % vol)
+        if not 0 <= pos <= 0x10000:
+            raise Pruefabbruch('ahi.device: ahir_Position 0x%x out of range' % pos)
+        if self.typ is not None and (typ, freq) != (self.typ, self.freq):
+            raise Pruefabbruch('ahi.device: format changed in mid-stream '
+                               '(%d/%d -> %d/%d)' % (self.typ, self.freq, typ, freq))
+        self.typ, self.freq = typ, freq
+        if link:
+            if link not in am.pending_io:
+                raise Pruefabbruch('ahi.device: ahir_Link 0x%06x is not outstanding'
+                                   % link)
+            start = self.ende.get(link, am.now)
+        else:
+            # Nothing linked: a gap if the chain had already run out.
+            if self.puffer and am.now > self.busy + 1:
+                self.leer += 1
+            start = max(am.now, self.busy)
+        self.log += bytes(am.u.mem_read(data, ln))
+        self.puffer += 1
+        dauer = (ln / fs) * 1e6 / float(freq if freq else 1)
+        self.busy = start + dauer
+        self.ende[req] = self.busy
+        am.pending_io[req] = self
+        am.at(self.busy, lambda r=req: am.reply_io(r) if r in am.pending_io else None)
+
+    def abort_io(self, req):
+        am = self.am
+        if req in am.pending_io:
+            am.wb(req + ndk.IO_ERROR, ndk.IOERR_ABORTED & 0xFF)
+            am.reply_io(req)
+            self.ende.pop(req, None)
         return 0
 
 
@@ -1421,7 +1530,7 @@ class AudioDevice:
         am = self.am
         cmd, unit = am.rw(req + ndk.IO_COMMAND), am.rl(req + ndk.IO_UNIT)
         if unit not in self.log or not (unit & self.allocated):
-            raise Pruefabbruch('audio.device: Kanal 0x%x nicht belegt' % unit)
+            raise Pruefabbruch('audio.device: channel 0x%x not allocated' % unit)
         am.wb(req + ndk.IO_ERROR, 0)
         if cmd == ndk.ADCMD_PERVOL:
             self.pervol[unit] = (am.rw(req + ndk.ioa_Period), am.rw(req + ndk.ioa_Volume))
@@ -1434,13 +1543,13 @@ class AudioDevice:
         data, ln = am.rl(req + ndk.ioa_Data), am.rl(req + ndk.ioa_Length)
         per, cyc = am.rw(req + ndk.ioa_Period), am.rw(req + ndk.ioa_Cycles)
         if ln == 0 or ln & 1:
-            raise Pruefabbruch('audio.device: Laenge %d (Paula zaehlt in Worten)' % ln)
+            raise Pruefabbruch('audio.device: length %d (Paula counts in words)' % ln)
         if not (am.type_of_mem(data) & ndk.MEMF_CHIP):
-            raise Pruefabbruch('audio.device: Tondaten 0x%06x nicht im Chip-RAM' % data)
+            raise Pruefabbruch('audio.device: sound data 0x%06x not in chip RAM' % data)
         if per < 124 or cyc != 1:
-            raise Pruefabbruch('audio.device: Periode %d, Zyklen %d' % (per, cyc))
+            raise Pruefabbruch('audio.device: period %d, cycles %d' % (per, cyc))
         if unit not in self.pervol:
-            raise Pruefabbruch('audio.device: CMD_WRITE vor ADCMD_PERVOL (Lautstaerke bliebe 0)')
+            raise Pruefabbruch('audio.device: CMD_WRITE before ADCMD_PERVOL (the volume would stay 0)')
         self.log[unit] += bytes(am.u.mem_read(data, ln))
         start = max(am.now, self.busy[unit])
         if self.puffer[unit] and am.now > self.busy[unit] + 1:

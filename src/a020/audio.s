@@ -1,4 +1,26 @@
-; audio.s - sound through audio.device (Paula).
+; audio.s - sound, two paths: audio.device (Paula) and ahi.device.
+;
+; PAULA is the default; AHI is asked for with the option AHI and never chosen
+; by itself (if ahi.device is missing, audio_open returns 4 and the player
+; reports it). What AHI brings: 16 bit instead of 8, the exact sample rate
+; instead of Paula's integer period, and the sound of a card or of SAGA.
+;
+; Both paths share everything that makes the sound the clock - the ring in
+; fast RAM, the FIFO of sent buffers, abholen and audio_played. They differ in
+; three places only:
+;
+;   buffers   Paula: one 8-bit buffer per channel in CHIP RAM, Paula plays one
+;             channel per request. AHI: one interleaved buffer per slot in any
+;             memory, one request per slot.
+;   order     Paula: the channel plays the requests in the order they were
+;             sent. AHI: ahir_Link points BACKWARDS at a request already sent
+;             and delays this one until that one is finished
+;             (ahi.device/CMD_WRITE). In both cases what finishes is a prefix
+;             of the FIFO, which is what abholen relies on.
+;   format    Paula gets 8-bit signed per channel (16 bit loses its low byte).
+;             AHI gets what it announces: 8 bit signed, or 16 bit signed in
+;             m68k word order - audio_write converts while filling the ring,
+;             so audio_service stays a plain copy.
 ;
 ; Model: src/audio.c (state 3f04d85, with the remainder at the end of the
 ; stream) and the mono patch P1. The behaviour is the same, the reasoning is
@@ -29,15 +51,27 @@
 
         include "player.i"
         include "devices/audio.i"
+        include "devices/ahi.i"
 
         xdef    audio_open,audio_close,audio_write,audio_service,audio_played
+        xdef    audio_weg_setzen
         xdef    au_rate,au_period,au_effrate,au_mask,au_bytes,au_sent,au_lost,au_under,au_ende
         xdef    au_err,au_minpend,au_maxring,au_checkio,au_bufsz,au_nbuf,au_rcount
+        xdef    au_weg,au_ahiunit
         xref    _SysBase,zt_freq,zeit_now,muldiv32
 
 NBUF    equ     16
 
         section code,code
+
+; audio_weg_setzen  d0 = 0 Paula / 1 AHI, d1 = ahi.device unit
+; BEFORE audio_open - afterwards nothing switches any more: a path change in
+; mid-stream would mean a gap, and the clock hangs on the buffer chain.
+audio_weg_setzen:
+        tst.l   d0
+        sne     au_weg
+        move.l  d1,au_ahiunit
+        rts
 
 audio_open:
         movem.l d2-d7/a2-a6,-(sp)
@@ -76,6 +110,9 @@ audio_open:
         moveq   #NBUF,d4
 .nb_gut:
         move.l  d4,au_nbuf
+        tst.b   au_weg
+        bne     ahi_oeffnen             ; d0 rate, d1 channels, d2 bits, d3 ABUF
+        move.l  #ioa_SIZEOF,au_reqsize
         move.l  zt_freq,d5              ; colour clock = EClock x 5
         move.l  d5,d6
         add.l   d5,d5
@@ -126,6 +163,7 @@ audio_open:
         move.l  #512,d1
 .puffer:
         move.l  d1,au_bufsz
+        move.l  d1,au_bufbytes          ; Paula: one byte per sample
 
         EXEC    CreateMsgPort
         move.l  d0,au_port
@@ -236,6 +274,7 @@ audio_open:
         move.l  au_rate,d0              ; rings: 2 s per channel
         add.l   d0,d0
         move.l  d0,au_ringsz
+        move.l  d0,au_ringbytes
         move.l  #MEMF_CLEAR,d1
         EXEC    AllocMem
         move.l  d0,au_ring
@@ -264,28 +303,177 @@ audio_open:
 .raus:  movem.l (sp)+,d2-d7/a2-a6
         rts
 
+; --- Opening the AHI path ------------------------------------------------
+;
+; Entered out of audio_open with d0 = rate, d1 = channels, d2 = bits,
+; d3 = ABUF (already clamped), au_nbuf set. No colour clock and no period:
+; ahi.device takes the rate as it is, so au_effrate == au_rate and the rate
+; deviation that Paula's integer period forces does not exist here.
+;
+; Return like audio_open: 0 good, 1 format, 3 memory, 4 no ahi.device. The
+; frame is the one of audio_open - the exit labels belong to it.
+ahi_oeffnen:
+        clr.b   au_vzchip               ; audio_write already converts
+        move.l  d2,d4                   ; frame = channels x bytes per sample
+        lsr.l   #3,d4
+        mulu.l  d1,d4
+        move.l  d4,au_fs
+        moveq   #AHIST_M8S,d5           ; type from channels and bits
+        cmp.l   #16,d2
+        bne     .typ8
+        moveq   #AHIST_M16S,d5
+        cmp.l   #2,d1
+        bne     .typ
+        moveq   #AHIST_S16S,d5
+        bra     .typ
+.typ8:  cmp.l   #2,d1
+        bne     .typ
+        moveq   #AHIST_S8S,d5
+.typ:   move.l  d5,au_type
+        move.l  d0,au_rate              ; no 28 kHz cap - that is Paula's limit
+        move.l  d0,au_effrate
+        clr.l   au_period
+        clr.l   au_clock
+        move.l  #AHIRequest_SIZEOF,au_reqsize
+
+        movem.l d0-d1,-(sp)             ; ticks per sample x 256, as for Paula
+        move.l  zt_freq,d0
+        move.l  #256,d1
+        bsr     muldiv32
+        cmp.l   #$ffff,d0
+        bls     .tps
+        moveq   #0,d0
+.tps:   move.l  d0,au_tps8
+        movem.l (sp)+,d0-d1
+
+        move.l  d0,d1                   ; buffer = rate / ABUF, to 4, >= 512
+        divu    d3,d1
+        and.l   #$ffff,d1
+        moveq   #-4,d2
+        and.l   d2,d1
+        cmp.l   #512,d1
+        bhs     .puffer
+        move.l  #512,d1
+.puffer:
+        move.l  d1,au_bufsz
+        move.l  au_fs,d0                ; bytes per buffer
+        mulu.l  d1,d0
+        move.l  d0,au_bufbytes
+
+        EXEC    CreateMsgPort
+        move.l  d0,au_port
+        beq     .e_ahi
+        move.l  d0,a0
+        move.l  #AHIRequest_SIZEOF,d0
+        EXEC    CreateIORequest
+        move.l  d0,au_alloc
+        beq     .e_ahi
+        move.l  d0,a1
+        move.w  #4,ahir_Version(a1)     ; MUST be set before OpenDevice
+        lea     ahiname,a0
+        move.l  au_ahiunit,d0
+        moveq   #0,d1
+        EXEC    OpenDevice
+        tst.b   d0
+        bne     .e_ahi
+        st      au_offen
+        move.l  au_ahiunit,au_mask      ; STATS shows the unit here
+
+        moveq   #0,d6                   ; one request and one buffer per slot
+.platz: cmp.l   au_nbuf,d6
+        bhs     .ringe
+        move.l  #AHIRequest_SIZEOF,d0
+        move.l  #MEMF_CLEAR,d1
+        EXEC    AllocMem
+        tst.l   d0
+        beq     .e_mem
+        move.l  d0,a2
+        move.l  d6,d0
+        lsl.l   #3,d0                   ; slot x 8: entry 0 of the pair
+        lea     au_req,a0
+        move.l  a2,0(a0,d0.l)
+        move.l  au_alloc,a0
+        move.l  a2,a1
+        move.l  #AHIRequest_SIZEOF,d0
+        EXEC    CopyMem
+        move.l  au_port,MN_REPLYPORT(a2)
+        move.l  au_bufbytes,d0
+        move.l  #MEMF_CLEAR,d1          ; any memory - AHI does not need chip
+        EXEC    AllocMem
+        tst.l   d0
+        beq     .e_mem
+        move.l  d6,d1
+        lsl.l   #3,d1
+        lea     au_buf,a0
+        move.l  d0,0(a0,d1.l)
+        addq.l  #1,d6
+        bra     .platz
+
+.ringe: move.l  au_rate,d0              ; ONE ring, interleaved, 2 s
+        add.l   d0,d0
+        move.l  d0,au_ringsz
+        move.l  au_fs,d1
+        mulu.l  d1,d0
+        move.l  d0,au_ringbytes
+        move.l  #MEMF_CLEAR,d1
+        EXEC    AllocMem
+        move.l  d0,au_ring
+        beq     .e_mem
+        move.l  #$ffffffff,au_minpend
+        bsr     zeit_now
+        move.l  d1,au_post0
+        clr.l   au_last
+        moveq   #0,d0
+        bra     .raus
+.e_ahi: bsr     audio_close
+        moveq   #4,d0
+        bra     .raus
+.e_mem: bsr     audio_close
+        moveq   #3,d0
+.raus:  movem.l (sp)+,d2-d7/a2-a6
+        rts
+
 audio_close:
         movem.l d0-d7/a0-a6,-(sp)
-        moveq   #0,d6
-.warten:
+        tst.b   au_weg                  ; AHI: abort first, then collect -
+        beq     .warten                 ; otherwise closing would wait until
+        moveq   #0,d6                   ; everything in the chain has played,
+.abbruch:                               ; up to half a second after "q".
         cmp.l   #NBUF,d6
+        bhs     .warten
+        lea     au_queued,a0
+        tst.b   0(a0,d6.l)
+        beq     .ab_weiter
+        move.l  d6,d0
+        lsl.l   #3,d0
+        lea     au_req,a0
+        move.l  0(a0,d0.l),d0
+        beq     .ab_weiter
+        move.l  d0,a1
+        EXEC    AbortIO
+.ab_weiter:
+        addq.l  #1,d6
+        bra     .abbruch
+.warten:
+        moveq   #0,d6
+.w:     cmp.l   #NBUF,d6
         bhs     .frei
         bsr     warte_puffer
         addq.l  #1,d6
-        bra     .warten
+        bra     .w
 .frei:  lea     au_buf,a2
         lea     au_req,a3
         moveq   #2*NBUF-1,d7
 .eins:  move.l  (a2),d0
         beq     .req
         move.l  d0,a1
-        move.l  au_bufsz,d0
+        move.l  au_bufbytes,d0
         EXEC    FreeMem
         clr.l   (a2)
 .req:   move.l  (a3),d0
         beq     .naechstes
         move.l  d0,a1
-        moveq   #ioa_SIZEOF,d0
+        move.l  au_reqsize,d0
         EXEC    FreeMem
         clr.l   (a3)
 .naechstes:
@@ -297,7 +485,7 @@ audio_close:
 .ring:  move.l  (a2),d0
         beq     .ring_weiter
         move.l  d0,a1
-        move.l  au_ringsz,d0
+        move.l  au_ringbytes,d0
         EXEC    FreeMem
         clr.l   (a2)
 .ring_weiter:
@@ -385,13 +573,81 @@ warte_puffer:
         dbra    d2,.k
         lea     au_queued,a0
         clr.b   0(a0,d6.l)
+        move.l  d6,d0                   ; AHI: nothing may link to it any more
+        addq.l  #1,d0
+        cmp.l   au_last,d0
+        bne     .raus
+        clr.l   au_last
 .raus:  movem.l (sp)+,d0-d2/a0-a2/a6
+        rts
+
+; d6 = slot, d7 = sample frames: one request to ahi.device. ahir_Link points
+; backwards at a request still outstanding, so this buffer is delayed until
+; that one is finished; if the predecessor is already done the link stays NULL
+; and the buffer starts at once. CMD_WRITE trashes the fields, so all of them
+; are filled again every time.
+sende_ahi:
+        movem.l d0-d2/a0-a3/a6,-(sp)
+        move.l  d6,d2
+        lsl.l   #3,d2
+        lea     au_req,a2
+        move.l  0(a2,d2.l),a1           ; the request of this slot
+        lea     au_buf,a3
+        move.l  0(a3,d2.l),d0
+        move.w  #CMD_WRITE,IO_COMMAND(a1)
+        clr.b   IO_FLAGS(a1)
+        move.l  d0,IO_DATA(a1)
+        move.l  d7,d1                   ; io_Length in bytes
+        move.l  au_fs,d0
+        mulu.l  d0,d1
+        move.l  d1,IO_LENGTH(a1)
+        clr.l   IO_OFFSET(a1)
+        move.l  au_type,ahir_Type(a1)
+        move.l  au_rate,ahir_Frequency(a1)
+        move.l  #$10000,ahir_Volume(a1) ; 1.0 - full volume
+        move.l  #$8000,ahir_Position(a1); centre (ignored for stereo types)
+        clr.l   ahir_Link(a1)
+        move.l  au_last,d0              ; predecessor still outstanding?
+        beq     .senden
+        subq.l  #1,d0
+        move.l  a1,-(sp)
+        move.l  d6,-(sp)
+        move.l  d0,d6
+        lea     au_queued,a0
+        tst.b   0(a0,d6.l)
+        beq     .kein_link
+        bsr     puffer_fertig
+        tst.l   d0
+        bne     .kein_link
+        move.l  d6,d0
+        lsl.l   #3,d0
+        lea     au_req,a0
+        move.l  0(a0,d0.l),d1
+        move.l  (sp),d6
+        move.l  4(sp),a1
+        move.l  d1,ahir_Link(a1)
+        bra     .link_fertig
+.kein_link:
+        move.l  (sp),d6
+        move.l  4(sp),a1
+.link_fertig:
+        addq.l  #8,sp
+.senden:
+        EXEC    SendIO
+        move.l  d6,d0
+        addq.l  #1,d0
+        move.l  d0,au_last
+        movem.l (sp)+,d0-d2/a0-a3/a6
         rts
 
 ; d6 = slot, d7 = samples: send both channels.
 sende_puffer:
         movem.l d0-d2/a0-a3/a6,-(sp)
-        move.l  d6,d2
+        tst.b   au_weg
+        beq     .paula
+        bsr     sende_ahi
+        bra     .buch
+.paula: move.l  d6,d2
         lsl.l   #3,d2
         lea     au_req,a2
         add.l   d2,a2
@@ -417,7 +673,7 @@ sende_puffer:
         addq.l  #4,d2
         cmp.l   #8,d2
         blo     .k
-        addq.l  #1,au_sent
+.buch:  addq.l  #1,au_sent
         lea     au_bdone,a0
         clr.b   0(a0,d6.l)
         lea     au_queued,a0
@@ -604,6 +860,9 @@ audio_service:
         bne     .raus                   ; only to an empty Paula.
 .rest:  cmp.l   #2,d0
         blo     .raus
+        move.l  d0,d7                   ; AHI counts frames, Paula words
+        tst.b   au_weg
+        bne     .suchen
         moveq   #-2,d7
         and.l   d0,d7
 .suchen:
@@ -617,7 +876,38 @@ audio_service:
         addq.l  #1,d6
         bra     .s
 .gefunden:
-        moveq   #0,d4                   ; channel
+        tst.b   au_weg
+        beq     .paula
+        move.l  d6,d0                   ; AHI: one piece per ring end, the
+        lsl.l   #3,d0                   ; data is already in AHI's format
+        lea     au_buf,a0
+        move.l  0(a0,d0.l),a3           ; target buffer
+        move.l  au_ring,a2
+        move.l  au_ringsz,d2            ; first piece up to the end of the ring
+        sub.l   au_rtail,d2
+        cmp.l   d7,d2
+        bls     .a_erstes
+        move.l  d7,d2
+.a_erstes:
+        move.l  au_fs,d3
+        move.l  au_rtail,d0
+        mulu.l  d3,d0
+        lea     0(a2,d0.l),a0
+        move.l  a3,a1
+        move.l  d2,d0
+        mulu.l  d3,d0
+        EXEC    CopyMem
+        move.l  d7,d0
+        sub.l   d2,d0
+        beq     .kopiert
+        move.l  a2,a0
+        move.l  d2,d1
+        mulu.l  d3,d1
+        lea     0(a3,d1.l),a1
+        mulu.l  d3,d0
+        EXEC    CopyMem
+        bra     .kopiert
+.paula: moveq   #0,d4                   ; channel
 .kopie: move.l  d6,d0
         add.l   d0,d0
         add.l   d4,d0
@@ -701,7 +991,14 @@ audio_write:
         bls     .r2
         move.l  d6,d3
 .r2:    move.l  au_ring,a3
-        add.l   au_rhead,a3
+        tst.b   au_weg                  ; AHI: frames, so rhead x frame size
+        beq     .pring
+        move.l  au_rhead,d0
+        move.l  au_fs,d1
+        mulu.l  d1,d0
+        add.l   d0,a3
+        bra     .kopf
+.pring: add.l   au_rhead,a3
         move.l  au_ring+4,d0
         beq     .kopf
         move.l  d0,a4
@@ -715,6 +1012,8 @@ audio_write:
         add.l   d3,au_rcount
         add.l   d3,au_bytes
         sub.l   d3,d6
+        tst.b   au_weg
+        bne     .ahi
         cmp.l   #8,au_bits
         bne     .b16
         tst.b   au_mono
@@ -747,6 +1046,30 @@ audio_write:
         addq.l  #4,a2
         subq.l  #1,d3
         bne     .st16
+        bra     .lauf
+
+; AHI: interleaved, in the format the request announces. 8 bit unsigned (as in
+; the stream) becomes signed; 16 bit little endian becomes m68k word order -
+; that is where the 16 bit stays 16 bit, while Paula drops the low byte.
+.ahi:   move.l  d3,d0                   ; values = frames x channels
+        cmp.l   #2,au_chans
+        bne     .a_eins
+        add.l   d0,d0
+.a_eins:
+        cmp.l   #8,au_bits
+        bne     .a16
+        moveq   #-128,d7
+.a8:    move.b  (a2)+,d1
+        eor.b   d7,d1
+        move.b  d1,(a3)+
+        subq.l  #1,d0
+        bne     .a8
+        bra     .lauf
+.a16:   move.b  1(a2),(a3)+
+        move.b  (a2),(a3)+
+        addq.l  #2,a2
+        subq.l  #1,d0
+        bne     .a16
         bra     .lauf
 .raus:  movem.l (sp)+,d2-d7/a2-a6
         rts
@@ -789,6 +1112,8 @@ kopie_chip:
 
         section data,data
 audioname:  dc.b    "audio.device",0
+ahiname:    dc.b    "ahi.device",0
+        cnop    0,2
 ; Paula: 0 and 3 left, 1 and 2 right - one from each side.
 kombis:     dc.b    $03,$05,$0a,$0c
 
@@ -839,3 +1164,12 @@ au_offen:       ds.b    1
 au_lief:        ds.b    1
 au_mono:        ds.b    1
 au_vzchip:      ds.b    1
+au_weg:         ds.b    1               ; 0 Paula, 1 AHI
+                cnop    0,4
+au_ahiunit:     ds.l    1
+au_fs:          ds.l    1               ; bytes per sample frame (AHI)
+au_type:        ds.l    1               ; AHIST_* (AHI)
+au_last:        ds.l    1               ; slot of the last request SENT, +1
+au_reqsize:     ds.l    1               ; bytes per request
+au_bufbytes:    ds.l    1               ; bytes per buffer
+au_ringbytes:   ds.l    1               ; bytes of one ring

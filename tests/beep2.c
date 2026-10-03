@@ -57,18 +57,18 @@ int main(void)
 
     port = CreateMsgPort();
     alloc = (struct IOAudio *)CreateIORequest(port, sizeof(struct IOAudio));
-    if (!port || !alloc) { out("kein Port/Request\n"); return 20; }
+    if (!port || !alloc) { out("no port/request\n"); return 20; }
 
     alloc->ioa_Request.io_Message.mn_Node.ln_Pri = 10;
     alloc->ioa_Data = anychannel; alloc->ioa_Length = sizeof(anychannel);
     if (OpenDevice((CONST_STRPTR)"audio.device", 0, (struct IORequest *)alloc, 0)) {
-        out("audio.device liess sich nicht oeffnen\n"); return 20;
+        out("audio.device could not be opened\n"); return 20;
     }
     outnum("belegte Kanalmaske: ", (long)(ULONG)alloc->ioa_Request.io_Unit);
     outnum("ioa_AllocKey:       ", (long)alloc->ioa_AllocKey);
 
     wave = (BYTE *)AllocVec(LEN, MEMF_CHIP | MEMF_CLEAR);
-    if (!wave) { out("kein Chip-RAM\n"); goto done; }
+    if (!wave) { out("no chip RAM\n"); goto done; }
     for (k = 0; k < LEN; k++) wave[k] = (k < LEN/2) ? 100 : -100;
 
     cyc = ((3546895UL / PER) * 3UL / 2UL) / LEN;
@@ -78,12 +78,12 @@ int main(void)
         struct IOAudio *r;
 
         switch (i) {
-        case 0: out("--- A: dieselbe Struktur wie fuer die Belegung\n"); r = alloc; break;
-        case 1: out("--- B: eigene Struktur, Kopie der Belegung (laut Spezifikation)\n");
+        case 0: out("--- A: the same structure as for the allocation\n"); r = alloc; break;
+        case 1: out("--- B: own structure, a copy of the allocation (as the specification says)\n");
                 w = (struct IOAudio *)AllocVec(sizeof(struct IOAudio), MEMF_ANY|MEMF_CLEAR);
                 *w = *alloc; w->ioa_Request.io_Message.mn_ReplyPort = port; r = w; break;
-        case 2: out("--- C: wie B, aber Periode/Lautstaerke vorher per ADCMD_PERVOL\n"); r = w; break;
-        case 3: out("--- D: wie B, aber DoIO statt SendIO/WaitIO\n"); r = w; break;
+        case 2: out("--- C: like B, but period/volume set beforehand through ADCMD_PERVOL\n"); r = w; break;
+        case 3: out("--- D: like B, but DoIO instead of SendIO/WaitIO\n"); r = w; break;
         default: r = alloc;
         }
 

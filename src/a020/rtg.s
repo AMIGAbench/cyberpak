@@ -600,13 +600,13 @@ formate:    dc.w    PIXFMT_RGB16,0,RGBFB_R5G6B5
             dc.w    PIXFMT_RGB15,1,RGBFB_R5G5B5
             dc.w    PIXFMT_RGB15PC,3,RGBFB_R5G5B5PC
             dc.w    -1
-g_lib:      dc.b    "cybergraphics.library fehlt oder die Workbench liegt nicht auf der Grafikkarte",0
-g_schirm:   dc.b    "Workbench-Schirm liess sich nicht sperren",0
-g_tiefe:    dc.b    "Workbench-Schirm hat weniger als 15 Bit - die Grafikkarte braucht 15 Bit oder mehr (Bildschirmmodus umstellen)",0
-g_fenster:  dc.b    "Fenster auf dem Workbench-Schirm liess sich nicht oeffnen",0
-g_p96:      dc.b    "HICOLOR braucht die Picasso96API.library - sie fehlt",0
-g_format:   dc.b    "HICOLOR: Bildschirmformat ist keines der vier 15/16-Bit-Formate, die der Decoder packen kann",0
-g_speicher: dc.b    "zu wenig Speicher fuer das Bild",0
+g_lib:      dc.b    "cybergraphics.library is missing or the Workbench is not on the graphics card",0
+g_schirm:   dc.b    "the Workbench screen could not be locked",0
+g_tiefe:    dc.b    "the Workbench screen has less than 15 bit - the graphics card needs 15 bit or more (change the screen mode)",0
+g_fenster:  dc.b    "the window on the Workbench screen could not be opened",0
+g_p96:      dc.b    "HICOLOR needs Picasso96API.library - it is missing",0
+g_format:   dc.b    "HICOLOR: the screen format is none of the four 15/16 bit formats the decoder can pack for",0
+g_speicher: dc.b    "not enough memory for the picture",0
                 cnop    0,4
 ; Reasons for RT_E_1..7
 rt_gruende: dc.l    g_lib,g_schirm,g_tiefe,g_fenster,g_p96,g_format,g_speicher

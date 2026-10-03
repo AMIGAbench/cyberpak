@@ -84,9 +84,9 @@ def c2p_zyklen(modus, h=180):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--bilder', type=int, default=60)
-    ap.add_argument('--us', type=float, default=0.9, help='us je Chip-Buszyklus (A600-Wert)')
+    ap.add_argument('--us', type=float, default=0.9, help='us per chip bus cycle (the A600 value)')
     a = ap.parse_args()
-    print('Chip-Buszyklen je Bild (%d Bilder), bewertet mit %.2f us je Zyklus' % (a.bilder, a.us))
+    print('chip bus cycles per frame (%d frames), evaluated with %.2f us per cycle' % (a.bilder, a.us))
     print('%-9s %-6s %9s %9s %9s %9s %9s' % ('Clip', 'Modus', 'lesen', 'schreiben', 'direkt ms', 'C2P', 'C2P ms'))
     for clip, path in CLIPS.items():
         data = schneiden(path, a.bilder)

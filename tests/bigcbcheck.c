@@ -27,9 +27,9 @@ int main(int argc, char **argv)
     const uint32_t w = 320, h = 192, stride = 320;
     int rc;
 
-    if (argc < 2) { puts("Aufruf: bigcbcheck <frame.cvid>"); return 2; }
+    if (argc < 2) { puts("usage: bigcbcheck <frame.cvid>"); return 2; }
     f = fopen(argv[1], "rb");
-    if (!f) { puts("nicht lesbar"); return 2; }
+    if (!f) { puts("not readable"); return 2; }
     fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
     data = (uint8_t *)malloc((size_t)n);
     if (!data || fread(data, 1, (size_t)n, f) != (size_t)n) return 2;
@@ -37,11 +37,11 @@ int main(int argc, char **argv)
 
     fb  = (uint8_t *)calloc((size_t)stride * h, 1);
     ctx = cvid_open(w, h, CVID_OUT_GRAY8);
-    if (!fb || !ctx) { puts("kein Speicher"); return 2; }
+    if (!fb || !ctx) { puts("no memory"); return 2; }
 
     rc = cvid_decode(ctx, data, (uint32_t)n, fb, stride);
 
-    printf("  bigcb  %ld Byte, rc=%d, kein Ueberlauf\n", n, rc);
+    printf("  bigcb  %ld bytes, rc=%d, no overflow\n", n, rc);
     cvid_close(ctx); free(fb); free(data);
     return 0;
 }

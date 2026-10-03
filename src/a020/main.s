@@ -2,8 +2,12 @@
 ;
 ; Invocation (dos ReadArgs):
 ;   CyberPak.020 DATEI/A,HAM6/S,DHAM6/S,DHAM8/S,GRAY=GREY/S,HICOLOR=16BIT/S,
-;                  STATS/S,QUIET/S,NOAUDIO/S,NOVIDEO/S,NOSER/S,ABUF/K/N,ANUM/K/N,READ/K/N,
-;                  BENCH/K/N
+;                  STATS/S,QUIET/S,NOAUDIO/S,NOVIDEO/S,NOSER/S,AHI/S,AHIUNIT/K/N,
+;                  ABUF/K/N,ANUM/K/N,READ/K/N,BENCH/K/N
+; AHI asks for ahi.device instead of Paula (16 bit, the exact rate, cards and
+; SAGA); AHIUNIT=n picks its unit, 0 is the user's preferred one. Without AHI
+; nothing changes, and AHI is never chosen by itself: if ahi.device is missing
+; the player says so and ends with 10.
 ; NOSER is accepted and ignored (same invocation as the C builds).
 ; BENCH=n is a measuring run: decode the first n frames (0 = all) without
 ; clock and sound, then report the decoder time per frame (spielen.s).
@@ -22,6 +26,7 @@
         xdef    _SysBase,_DOSBase
         xdef    opt_file,opt_ham6,opt_gray,opt_stats,opt_quiet
         xdef    opt_noaudio,opt_novideo,opt_abuf,opt_anum,opt_read
+        xdef    opt_ahi,opt_ahiunit
         xdef    opt_dham6,opt_dham8,opt_hicolor,opt_noser,opt_bench
         xdef    fehler,modus_fehlt
         xref    out_str,out_nl,out_unum
@@ -91,7 +96,16 @@ optionen:
         move.l  (a0)+,opt_noaudio
         move.l  (a0)+,opt_novideo
         move.l  (a0)+,opt_noser
-        move.l  (a0)+,d0                ; ABUF: pointer to LONG or 0
+        move.l  (a0)+,opt_ahi           ; AHI: ahi.device instead of Paula
+        move.l  (a0)+,d0                ; AHIUNIT: pointer to LONG or 0
+        beq     .abuf
+        move.l  d0,a1
+        move.l  (a1),d0
+        bmi     .falsch_unit
+        cmp.l   #255,d0
+        bhi     .falsch_unit
+        move.l  d0,opt_ahiunit
+.abuf:  move.l  (a0)+,d0                ; ABUF: pointer to LONG or 0
         beq     .anum
         move.l  d0,a1
         move.l  (a1),d0
@@ -152,6 +166,9 @@ optionen:
 .falsch_read:
         lea     t_read,a0
         bra     fehler
+.falsch_unit:
+        lea     t_ahiunit,a0
+        bra     fehler
 
 ; Only with STATS: what was understood.
 optionen_zeigen:
@@ -198,8 +215,14 @@ optionen_zeigen:
         bsr     out_str
 .nov:   lea     t_novideo,a0
         tst.l   opt_novideo
-        beq     .zeile
+        beq     .ahi
         bsr     out_str
+.ahi:   tst.l   opt_ahi
+        beq     .zeile
+        lea     t_ahi,a0
+        bsr     out_str
+        move.l  opt_ahiunit,d0
+        bsr     out_unum
 .zeile: bsr     out_nl
 .raus:  rts
 
@@ -292,17 +315,18 @@ aufraeumen:
 opt_abuf:   dc.l    32
 opt_anum:   dc.l    16
 opt_read:   dc.l    16
+opt_ahiunit: dc.l   0               ; 0 = the unit the user prefers
 dosname:    dc.b    "dos.library",0
 progname:   dc.b    "CyberPak",0
-template:   dc.b    "DATEI/A,HAM6/S,DHAM6/S,DHAM8/S,GRAY=GREY/S,HICOLOR=16BIT/S,STATS/S,QUIET/S,NOAUDIO/S,NOVIDEO/S,NOSER/S,ABUF/K/N,ANUM/K/N,READ/K/N,BENCH/K/N",0
+template:   dc.b    "DATEI/A,HAM6/S,DHAM6/S,DHAM8/S,GRAY=GREY/S,HICOLOR=16BIT/S,STATS/S,QUIET/S,NOAUDIO/S,NOVIDEO/S,NOSER/S,AHI/S,AHIUNIT/K/N,ABUF/K/N,ANUM/K/N,READ/K/N,BENCH/K/N",0
 t_fehler:   dc.b    "[FAIL] ",0
-t_einmodus: dc.b    "Nur ein Modus: HAM6, DHAM6, DHAM8, GRAY oder HICOLOR",0
-t_abuf:     dc.b    "ABUF muss groesser als 0 sein",0
-t_anum:     dc.b    "ANUM muss groesser als 0 sein",0
-t_read:     dc.b    "READ muss 1, 2, 4, 8, 16, 32 oder 64 (KB) sein",0
+t_einmodus: dc.b    "Only one mode: HAM6, DHAM6, DHAM8, GRAY or HICOLOR",0
+t_abuf:     dc.b    "ABUF has to be greater than 0",0
+t_anum:     dc.b    "ANUM has to be greater than 0",0
+t_read:     dc.b    "READ has to be 1, 2, 4, 8, 16, 32 or 64 (KB)",0
 t_readk:    dc.b    ", READ ",0
 t_kopf:     dc.b    "CyberPak 020/030: ",0
-t_modusauto: dc.b   ", Modus automatisch",0
+t_modusauto: dc.b   ", mode automatic",0
 t_modusgr:  dc.b    ", GRAY",0
 t_modush6:  dc.b    ", HAM6",0
 t_modusd6:  dc.b    ", DHAM6",0
@@ -311,11 +335,13 @@ t_modushc:  dc.b    ", HICOLOR",0
 t_abufk:    dc.b    ", ABUF ",0
 t_anumk:    dc.b    ", ANUM ",0
 t_noaudio:  dc.b    ", NOAUDIO",0
+t_ahi:      dc.b    ", AHI unit ",0
+t_ahiunit:  dc.b    "AHIUNIT has to be 0 to 255",0
 t_novideo:  dc.b    ", NOVIDEO",0
-t_mf1:      dc.b    "Modus ",34,0
-t_mf2:      dc.b    34," nicht verfuegbar: ",0
-t_mf3:      dc.b    10,"Bitte einen anderen Modus probieren",0
-t_mf4:      dc.b    ", z. B.: ",0
+t_mf1:      dc.b    "Mode ",34,0
+t_mf2:      dc.b    34," not available: ",0
+t_mf3:      dc.b    10,"Please try a different mode",0
+t_mf4:      dc.b    ", e.g.: ",0
 
         section bss,bss
 
@@ -325,7 +351,7 @@ savesp:     ds.l    1
 rueckgabe:  ds.l    1
 wbmsg:      ds.l    1
 rdargs:     ds.l    1
-argarray:   ds.l    15
+argarray:   ds.l    17
 opt_file:   ds.l    1
 opt_ham6:   ds.l    1
 opt_gray:   ds.l    1
@@ -338,3 +364,4 @@ opt_dham8:  ds.l    1
 opt_hicolor: ds.l   1
 opt_noser:  ds.l    1
 opt_bench:  ds.l    1
+opt_ahi:    ds.l    1
