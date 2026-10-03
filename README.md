@@ -1,9 +1,9 @@
 # CyberPak
 
 A Cinepak player for 68k Amigas — from the 68000 up to the 68080. It plays CPKS
-streams (Cinepak in a lean streaming container) with sound through Paula and
-puts the picture either on a graphics card or straight into the bitplanes of a
-chipset screen.
+streams (Cinepak in a lean streaming container provided by BoingTube and similar apps)
+with sound through Paula and puts the picture either on a graphics card or straight
+into the bitplanes of a chipset screen.
 
 CyberPak is a reimplementation of **CyberAVI** (1996–1997, Thore Böckelmann);
 its origin and the terms that follow from it are in [LICENSE](LICENSE).
